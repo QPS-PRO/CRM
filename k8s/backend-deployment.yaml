@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: school-hub
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: school-hub-backend:latest  # Update with your image registry
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: DB_PASSWORD
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: SECRET_KEY
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DEBUG
+        - name: ALLOWED_HOSTS
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: ALLOWED_HOSTS
+        - name: CORS_ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: CORS_ALLOWED_ORIGINS
+        - name: CELERY_BROKER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: CELERY_BROKER_URL
+        - name: CELERY_RESULT_BACKEND
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: CELERY_RESULT_BACKEND
+        - name: TIME_ZONE
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: TIME_ZONE
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /admin/
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /admin/
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: school-hub
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+

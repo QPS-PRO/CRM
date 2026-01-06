@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: school-hub
+
+resources:
+  - namespace.yaml
+  - postgres-configmap.yaml
+  - postgres-secret.yaml
+  - postgres-pvc.yaml
+  - postgres-deployment.yaml
+  - redis-deployment.yaml
+  - backend-configmap.yaml
+  - backend-secret.yaml
+  - backend-deployment.yaml
+  - celery-worker-deployment.yaml
+  - celery-beat-deployment.yaml
+  - frontend-deployment.yaml
+  - ingress.yaml
+

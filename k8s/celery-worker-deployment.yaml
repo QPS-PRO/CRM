@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: school-hub
+  labels:
+    app: celery-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+      - name: celery-worker
+        image: school-hub-backend:latest  # Update with your image registry
+        imagePullPolicy: IfNotPresent
+        command: ["celery", "-A", "schoolhub", "worker", "--loglevel=info"]
+        env:
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: DB_PASSWORD
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: SECRET_KEY
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DEBUG
+        - name: ALLOWED_HOSTS
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: ALLOWED_HOSTS
+        - name: CELERY_BROKER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: CELERY_BROKER_URL
+        - name: CELERY_RESULT_BACKEND
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: CELERY_RESULT_BACKEND
+        - name: TIME_ZONE
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: TIME_ZONE
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: celery-worker
+  namespace: school-hub
+spec:
+  selector:
+    app: celery-worker
+  ports: []
+  type: ClusterIP
+
