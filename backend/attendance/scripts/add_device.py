@@ -5,7 +5,6 @@ Or: python manage.py shell
     >>> exec(open('attendance/scripts/add_device.py').read())
 """
 from attendance.models import FingerprintDevice
-from core.models import Grade
 
 # Device configuration - UPDATE THESE VALUES
 DEVICE_CONFIG = {
@@ -13,12 +12,12 @@ DEVICE_CONFIG = {
     'model': 'ZK702',
     'ip_address': '192.168.1.100',  # UPDATE THIS with your device IP
     'port': 4370,
-    'grade_category': Grade.PRIMARY,
+    'grade_category': 'PRIMARY',
     'status': 'ACTIVE'
 }
 
 # Check if device already exists for this grade
-existing = FingerprintDevice.objects.filter(grade_category=Grade.PRIMARY).first()
+existing = FingerprintDevice.objects.filter(grade_category='PRIMARY').first()
 if existing:
     print(f"Device already exists for PRIMARY grade: {existing}")
     print(f"  ID: {existing.id}")

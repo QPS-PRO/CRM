@@ -251,10 +251,11 @@ function Students() {
 
   const getTagColor = (grade) => {
     const colors = {
-      PRIMARY: '#0ABAB5',
-      SECONDARY: '#FF6B9D',
-      HIGH_SCHOOL: '#4CAF50',
       KINDERGARTEN: '#FF9800',
+      PRIMARY: '#0ABAB5',
+      INTERMEDIATE: '#9C27B0',
+      SECONDARY: '#FF6B9D',
+      AMERICAN_DIPLOMA: '#4CAF50',
     }
     return colors[grade] || '#9E9E9E'
   }
@@ -281,10 +282,11 @@ function Students() {
 
   const branches = branchesData?.results || []
   const grades = [
-    { value: 'PRIMARY', label: t('students.grades.primary') },
-    { value: 'SECONDARY', label: t('students.grades.secondary') },
-    { value: 'HIGH_SCHOOL', label: t('students.grades.highSchool') },
     { value: 'KINDERGARTEN', label: t('students.grades.kindergarten') },
+    { value: 'PRIMARY', label: t('students.grades.primary') },
+    { value: 'INTERMEDIATE', label: t('students.grades.intermediate') },
+    { value: 'SECONDARY', label: t('students.grades.secondary') },
+    { value: 'AMERICAN_DIPLOMA', label: t('students.grades.americanDiploma') },
   ]
 
   const viewFields = useMemo(() => {

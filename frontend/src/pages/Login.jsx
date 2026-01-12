@@ -110,7 +110,7 @@ function Login() {
                 {t('common.appName')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {t('auth.signInToAccount')}
+                {t('auth.crm')}
               </Typography>
             </Box>
 

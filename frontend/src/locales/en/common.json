@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "School Hub",
+    "appName": "Qurtubah Al-Ahliyah School",
     "home": "Home",
     "createNew": "Create New",
     "edit": "Edit",
@@ -47,7 +47,7 @@
   },
   "auth": {
     "signIn": "Sign In",
-    "signInToAccount": "Sign in to your account",
+    "crm": "Customer Relationship Management",
     "username": "Username",
     "password": "Password",
     "loginFailed": "Login failed",
@@ -119,10 +119,11 @@
     "newParent": "New Parent",
     "status": "Status",
     "grades": {
+      "kindergarten": "Kindergarten",
       "primary": "Primary",
+      "intermediate": "Intermediate",
       "secondary": "Secondary",
-      "highSchool": "High School",
-      "kindergarten": "Kindergarten"
+      "americanDiploma": "American Diploma"
     },
     "genders": {
       "male": "Male",
@@ -174,6 +175,8 @@
     "allStatuses": "All Statuses",
     "filterByClass": "Filter by Class",
     "filterByStatus": "Filter by Status",
+    "filterByDevice": "Filter by Device",
+    "allDevices": "All Devices",
     "name": "Name",
     "type": "Type",
     "status": "Status",
@@ -204,6 +207,8 @@
     "port": "Port",
     "serialNumber": "Serial Number",
     "gradeCategory": "Grade Category",
+    "levels": "Levels",
+    "modelHelper": "Device model name (e.g., ZK702)",
     "status": "Status",
     "connection": "Connection",
     "connected": "Connected",

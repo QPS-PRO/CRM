@@ -3,10 +3,11 @@ from django.db import models
 
 class Grade(models.TextChoices):
     """Student grade/category choices"""
-    PRIMARY = 'PRIMARY', 'Primary'
-    SECONDARY = 'SECONDARY', 'Secondary'
-    HIGH_SCHOOL = 'HIGH_SCHOOL', 'High School'
     KINDERGARTEN = 'KINDERGARTEN', 'Kindergarten'
+    PRIMARY = 'PRIMARY', 'Primary'
+    INTERMEDIATE = 'INTERMEDIATE', 'Intermediate'
+    SECONDARY = 'SECONDARY', 'Secondary'
+    AMERICAN_DIPLOMA = 'AMERICAN_DIPLOMA', 'American Diploma'
 
 
 class Branch(models.Model):

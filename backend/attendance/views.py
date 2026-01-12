@@ -169,6 +169,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         level = self.request.query_params.get('level')
         class_name = self.request.query_params.get('class')
         status = self.request.query_params.get('status')
+        device_id = self.request.query_params.get('device')
         
         if date_from:
             queryset = queryset.filter(timestamp__gte=date_from)
@@ -189,6 +190,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(student__class_name=class_name)
         if status:
             queryset = queryset.filter(status=status)
+        if device_id:
+            try:
+                device = FingerprintDevice.objects.get(id=device_id)
+                queryset = queryset.filter(device=device)
+            except FingerprintDevice.DoesNotExist:
+                pass
         
         return queryset
 
@@ -220,7 +227,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     pass
             
             if not device:
-                device = FingerprintDevice.get_device_for_grade(student.grade, student.branch)
+                device = FingerprintDevice.get_device_for_grade(
+                    student.grade, 
+                    student.branch, 
+                    student.level
+                )
             
             # Create attendance record
             attendance = Attendance.create_attendance(

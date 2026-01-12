@@ -244,8 +244,9 @@ class StudentViewSet(viewsets.ModelViewSet):
                             errors.append(f'Row {row_idx}: Missing required fields (first_name, last_name, or student_id)')
                             continue
                         
-                        if grade not in [g[0] for g in Grade.choices]:
-                            errors.append(f'Row {row_idx}: Invalid grade "{grade}". Must be one of: {", ".join([g[0] for g in Grade.choices])}')
+                        valid_grades = [g[0] for g in Grade.choices]
+                        if grade not in valid_grades:
+                            errors.append(f'Row {row_idx}: Invalid grade "{grade}". Must be one of: {", ".join(valid_grades)}')
                             continue
                         
                         if gender not in ['M', 'F']:

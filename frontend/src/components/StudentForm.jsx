@@ -26,10 +26,11 @@ import { getParents } from '../api/parents'
 import { getBranches } from '../api/branches'
 
 const Grade = {
-  PRIMARY: 'PRIMARY',
-  SECONDARY: 'SECONDARY',
-  HIGH_SCHOOL: 'HIGH_SCHOOL',
   KINDERGARTEN: 'KINDERGARTEN',
+  PRIMARY: 'PRIMARY',
+  INTERMEDIATE: 'INTERMEDIATE',
+  SECONDARY: 'SECONDARY',
+  AMERICAN_DIPLOMA: 'AMERICAN_DIPLOMA',
 }
 
 const Gender = {
@@ -212,10 +213,11 @@ function StudentForm({ open, onClose, onSubmit, student = null, loading = false 
                     onChange={handleChange}
                     label={t('students.grade')}
                   >
-                    <MenuItem value={Grade.PRIMARY}>{t('students.grades.primary')}</MenuItem>
-                    <MenuItem value={Grade.SECONDARY}>{t('students.grades.secondary')}</MenuItem>
-                    <MenuItem value={Grade.HIGH_SCHOOL}>{t('students.grades.highSchool')}</MenuItem>
                     <MenuItem value={Grade.KINDERGARTEN}>{t('students.grades.kindergarten')}</MenuItem>
+                    <MenuItem value={Grade.PRIMARY}>{t('students.grades.primary')}</MenuItem>
+                    <MenuItem value={Grade.INTERMEDIATE}>{t('students.grades.intermediate')}</MenuItem>
+                    <MenuItem value={Grade.SECONDARY}>{t('students.grades.secondary')}</MenuItem>
+                    <MenuItem value={Grade.AMERICAN_DIPLOMA}>{t('students.grades.americanDiploma')}</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>

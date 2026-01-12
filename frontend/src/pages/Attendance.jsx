@@ -18,6 +18,7 @@ import {
 } from '@mui/material'
 import { getAttendanceRecords, deleteAttendanceRecord } from '../api/attendance'
 import { getBranches } from '../api/branches'
+import { getDevices } from '../api/devices'
 import DataTable from '../components/DataTable'
 import { format } from 'date-fns'
 import jsPDF from 'jspdf'
@@ -37,6 +38,7 @@ function Attendance() {
   const [selectedLevel, setSelectedLevel] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
+  const [selectedDevice, setSelectedDevice] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
@@ -58,6 +60,11 @@ function Attendance() {
     queryFn: () => getBranches(),
   })
 
+  const { data: devicesData } = useQuery({
+    queryKey: ['devices'],
+    queryFn: () => getDevices({ page_size: 1000 }),
+  })
+
   const { data, isLoading } = useQuery({
     queryKey: [
       'attendance',
@@ -70,6 +77,7 @@ function Attendance() {
       selectedLevel,
       selectedClass,
       selectedStatus,
+      selectedDevice,
       dateFrom,
       dateTo,
     ],
@@ -85,6 +93,7 @@ function Attendance() {
       if (selectedLevel) params.level = selectedLevel
       if (selectedClass) params.class = selectedClass
       if (selectedStatus) params.status = selectedStatus
+      if (selectedDevice) params.device = selectedDevice
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
       return getAttendanceRecords(params)
@@ -163,6 +172,7 @@ function Attendance() {
       if (selectedLevel) params.level = selectedLevel
       if (selectedClass) params.class = selectedClass
       if (selectedStatus) params.status = selectedStatus
+      if (selectedDevice) params.device = selectedDevice
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
 
@@ -225,10 +235,11 @@ function Attendance() {
         }
         if (selectedGrade) {
           const gradeLabels = {
-            PRIMARY: t('students.grades.primary'),
-            SECONDARY: t('students.grades.secondary'),
-            HIGH_SCHOOL: t('students.grades.highSchool'),
             KINDERGARTEN: t('students.grades.kindergarten'),
+            PRIMARY: t('students.grades.primary'),
+            INTERMEDIATE: t('students.grades.intermediate'),
+            SECONDARY: t('students.grades.secondary'),
+            AMERICAN_DIPLOMA: t('students.grades.americanDiploma'),
           }
           filterInfo.push(`${t('attendance.filterByGrade')}: ${gradeLabels[selectedGrade] || selectedGrade}`)
         }
@@ -237,6 +248,10 @@ function Attendance() {
         }
         if (selectedClass) {
           filterInfo.push(`${t('attendance.filterByClass')}: ${selectedClass}`)
+        }
+        if (selectedDevice) {
+          const device = devicesData?.results?.find((d) => d.id === parseInt(selectedDevice))
+          if (device) filterInfo.push(`${t('attendance.filterByDevice')}: ${device.name}`)
         }
         if (searchValue) {
           filterInfo.push(`${t('common.search')}: ${searchValue}`)
@@ -364,10 +379,11 @@ function Attendance() {
         }
         if (selectedGrade) {
           const gradeLabels = {
-            PRIMARY: t('students.grades.primary'),
-            SECONDARY: t('students.grades.secondary'),
-            HIGH_SCHOOL: t('students.grades.highSchool'),
             KINDERGARTEN: t('students.grades.kindergarten'),
+            PRIMARY: t('students.grades.primary'),
+            INTERMEDIATE: t('students.grades.intermediate'),
+            SECONDARY: t('students.grades.secondary'),
+            AMERICAN_DIPLOMA: t('students.grades.americanDiploma'),
           }
           filterInfo.push(`${t('attendance.filterByGrade')}: ${gradeLabels[selectedGrade] || selectedGrade}`)
         }
@@ -376,6 +392,10 @@ function Attendance() {
         }
         if (selectedClass) {
           filterInfo.push(`${t('attendance.filterByClass')}: ${selectedClass}`)
+        }
+        if (selectedDevice) {
+          const device = devicesData?.results?.find((d) => d.id === parseInt(selectedDevice))
+          if (device) filterInfo.push(`${t('attendance.filterByDevice')}: ${device.name}`)
         }
         if (searchValue) {
           filterInfo.push(`${t('common.search')}: ${searchValue}`)
@@ -505,10 +525,11 @@ function Attendance() {
 
   const branches = branchesData?.results || []
   const grades = [
-    { value: 'PRIMARY', label: t('students.grades.primary') },
-    { value: 'SECONDARY', label: t('students.grades.secondary') },
-    { value: 'HIGH_SCHOOL', label: t('students.grades.highSchool') },
     { value: 'KINDERGARTEN', label: t('students.grades.kindergarten') },
+    { value: 'PRIMARY', label: t('students.grades.primary') },
+    { value: 'INTERMEDIATE', label: t('students.grades.intermediate') },
+    { value: 'SECONDARY', label: t('students.grades.secondary') },
+    { value: 'AMERICAN_DIPLOMA', label: t('students.grades.americanDiploma') },
   ]
   const levels = Array.from({ length: 12 }, (_, i) => ({
     value: i + 1,
@@ -589,6 +610,21 @@ function Attendance() {
             <MenuItem value="ATTENDED">{t('attendance.statusAttended')}</MenuItem>
             <MenuItem value="LATE">{t('attendance.statusLate')}</MenuItem>
             <MenuItem value="ABSENT">{t('attendance.statusAbsent')}</MenuItem>
+          </Select>
+        </FormControl>
+        <FormControl sx={{ minWidth: 200 }}>
+          <InputLabel>{t('attendance.filterByDevice')}</InputLabel>
+          <Select
+            value={selectedDevice}
+            label={t('attendance.filterByDevice')}
+            onChange={(e) => setSelectedDevice(e.target.value)}
+          >
+            <MenuItem value="">{t('attendance.allDevices')}</MenuItem>
+            {(devicesData?.results || []).map((device) => (
+              <MenuItem key={device.id} value={device.id}>
+                {device.name}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
         <TextField

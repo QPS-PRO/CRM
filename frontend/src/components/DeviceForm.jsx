@@ -12,20 +12,19 @@ import {
   InputLabel,
   Select,
   Box,
+  Chip,
+  OutlinedInput,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { getBranches } from '../api/branches'
 import { useTranslation } from 'react-i18next'
 
 const Grade = {
-  PRIMARY: 'PRIMARY',
-  SECONDARY: 'SECONDARY',
-  HIGH_SCHOOL: 'HIGH_SCHOOL',
   KINDERGARTEN: 'KINDERGARTEN',
-}
-
-const DeviceModel = {
-  ZK702: 'ZK702',
+  PRIMARY: 'PRIMARY',
+  INTERMEDIATE: 'INTERMEDIATE',
+  SECONDARY: 'SECONDARY',
+  AMERICAN_DIPLOMA: 'AMERICAN_DIPLOMA',
 }
 
 const DeviceStatus = {
@@ -38,10 +37,11 @@ function DeviceForm({ open, onClose, onSubmit, device = null, loading = false })
   const { t } = useTranslation()
   const [formData, setFormData] = useState({
     name: '',
-    model: DeviceModel.ZK702,
+    model: '',
     ip_address: '',
     port: 4370,
     grade_category: '',
+    levels: [],
     branch_id: '',
     status: DeviceStatus.ACTIVE,
   })
@@ -56,20 +56,22 @@ function DeviceForm({ open, onClose, onSubmit, device = null, loading = false })
     if (device) {
       setFormData({
         name: device.name || '',
-        model: device.model || DeviceModel.ZK702,
+        model: device.model || '',
         ip_address: device.ip_address || '',
         port: device.port || 4370,
         grade_category: device.grade_category || '',
+        levels: device.levels || [],
         branch_id: device.branch?.id || '',
         status: device.status || DeviceStatus.ACTIVE,
       })
     } else {
       setFormData({
         name: '',
-        model: DeviceModel.ZK702,
+        model: '',
         ip_address: '',
         port: 4370,
         grade_category: '',
+        levels: [],
         branch_id: '',
         status: DeviceStatus.ACTIVE,
       })
@@ -84,11 +86,22 @@ function DeviceForm({ open, onClose, onSubmit, device = null, loading = false })
     }))
   }
 
+  const handleLevelsChange = (event) => {
+    const {
+      target: { value },
+    } = event
+    setFormData((prev) => ({
+      ...prev,
+      levels: typeof value === 'string' ? value.split(',').map(Number) : value,
+    }))
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
     const submitData = {
       ...formData,
       branch_id: formData.branch_id ? parseInt(formData.branch_id) : null,
+      levels: formData.levels.map(Number), // Ensure levels are numbers
     }
     onSubmit(submitData)
   }
@@ -112,17 +125,16 @@ function DeviceForm({ open, onClose, onSubmit, device = null, loading = false })
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>{t('devices.model')}</InputLabel>
-                  <Select
-                    name="model"
-                    value={formData.model}
-                    onChange={handleChange}
-                    label={t('devices.model')}
-                  >
-                    <MenuItem value={DeviceModel.ZK702}>ZKteco Model 702</MenuItem>
-                  </Select>
-                </FormControl>
+                <TextField
+                  fullWidth
+                  label={t('devices.model')}
+                  name="model"
+                  value={formData.model}
+                  onChange={handleChange}
+                  required
+                  placeholder="e.g., ZK702"
+                  helperText={t('devices.modelHelper')}
+                />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth required>
@@ -152,10 +164,37 @@ function DeviceForm({ open, onClose, onSubmit, device = null, loading = false })
                     label={t('devices.gradeCategory')}
                     disabled={!!device} // Disable when editing (one device per grade)
                   >
-                    <MenuItem value={Grade.PRIMARY}>{t('students.grades.primary')}</MenuItem>
-                    <MenuItem value={Grade.SECONDARY}>{t('students.grades.secondary')}</MenuItem>
-                    <MenuItem value={Grade.HIGH_SCHOOL}>{t('students.grades.highSchool')}</MenuItem>
                     <MenuItem value={Grade.KINDERGARTEN}>{t('students.grades.kindergarten')}</MenuItem>
+                    <MenuItem value={Grade.PRIMARY}>{t('students.grades.primary')}</MenuItem>
+                    <MenuItem value={Grade.INTERMEDIATE}>{t('students.grades.intermediate')}</MenuItem>
+                    <MenuItem value={Grade.SECONDARY}>{t('students.grades.secondary')}</MenuItem>
+                    <MenuItem value={Grade.AMERICAN_DIPLOMA}>{t('students.grades.americanDiploma')}</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>{t('devices.levels')}</InputLabel>
+                  <Select
+                    multiple
+                    name="levels"
+                    value={formData.levels}
+                    onChange={handleLevelsChange}
+                    input={<OutlinedInput label={t('devices.levels')} />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {selected.map((value) => (
+                          <Chip key={value} label={t(`students.levels.${value}`)} size="small" />
+                        ))}
+                      </Box>
+                    )}
+                    disabled={!!device} // Disable when editing (one device per grade/levels)
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((level) => (
+                      <MenuItem key={level} value={level}>
+                        {t(`students.levels.${level}`)}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>

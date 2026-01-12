@@ -8,10 +8,6 @@ from core.models import Grade, Student, Branch, Parent
 
 class FingerprintDevice(models.Model):
     """ZKteco fingerprint device model"""
-    DEVICE_MODEL_CHOICES = [
-        ('ZK702', 'ZKteco Model 702'),
-    ]
-
     DEVICE_STATUS_CHOICES = [
         ('ACTIVE', 'Active'),
         ('INACTIVE', 'Inactive'),
@@ -19,15 +15,18 @@ class FingerprintDevice(models.Model):
     ]
 
     name = models.CharField(max_length=100, help_text="Device name/identifier")
-    model = models.CharField(max_length=50, choices=DEVICE_MODEL_CHOICES, default='ZK702')
+    model = models.CharField(max_length=100, help_text="Device model (e.g., ZK702)")
     ip_address = models.GenericIPAddressField(help_text="Device IP address")
     port = models.IntegerField(default=4370, help_text="Device port (default: 4370)")
     serial_number = models.CharField(max_length=100, unique=True, blank=True, null=True)
     branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='devices', help_text="Branch this device belongs to")
     grade_category = models.CharField(
-        max_length=20,
-        choices=Grade.choices,
-        help_text="Grade category this device is assigned to (one device per grade per branch)"
+        max_length=50,
+        help_text="Grade category this device is assigned to"
+    )
+    levels = models.JSONField(
+        default=list,
+        help_text="List of student levels this device is assigned to (e.g., [1, 2, 3] or [1])"
     )
     status = models.CharField(max_length=20, choices=DEVICE_STATUS_CHOICES, default='ACTIVE')
     last_sync = models.DateTimeField(null=True, blank=True, help_text="Last synchronization time")
@@ -36,22 +35,68 @@ class FingerprintDevice(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [['branch', 'grade_category']]
         ordering = ['-created_at']
         verbose_name = 'Fingerprint Device'
         verbose_name_plural = 'Fingerprint Devices'
+        # Note: Uniqueness for (branch, grade_category, levels) is enforced in clean() method
+        # since JSONField uniqueness constraints are not reliably supported across all databases
+
+    def clean(self):
+        """Validate that levels is a list of integers between 1 and 12, and check uniqueness"""
+        # Validate levels format
+        if not isinstance(self.levels, list):
+            raise ValidationError("Levels must be a list")
+        
+        if not self.levels:
+            raise ValidationError("At least one level must be specified")
+        
+        for level in self.levels:
+            if not isinstance(level, int) or level < 1 or level > 12:
+                raise ValidationError(f"Each level must be an integer between 1 and 12. Found: {level}")
+        
+        # Remove duplicates and sort
+        self.levels = sorted(set(self.levels))
+        
+        # Check uniqueness: branch + grade_category + levels combination
+        existing = FingerprintDevice.objects.filter(
+            branch=self.branch,
+            grade_category=self.grade_category,
+            levels=self.levels
+        ).exclude(pk=self.pk if self.pk else None)
+        
+        if existing.exists():
+            levels_str = ', '.join(map(str, self.levels))
+            raise ValidationError(
+                f"A device already exists for branch '{self.branch}', "
+                f"grade '{self.grade_category}', and levels [{levels_str}]"
+            )
+
+    def save(self, *args, **kwargs):
+        """Override save to call clean()"""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.name} ({self.grade_category}) - {self.ip_address}"
+        levels_str = ', '.join(map(str, self.levels)) if self.levels else 'No levels'
+        return f"{self.name} ({self.grade_category}, Levels: {levels_str}) - {self.ip_address}"
 
     @staticmethod
-    def get_device_for_grade(grade, branch=None):
-        """Get the fingerprint device assigned to a specific grade and branch"""
+    def get_device_for_grade(grade, branch=None, level=None):
+        """Get the fingerprint device assigned to a specific grade, branch, and level"""
         try:
             query = {'grade_category': grade, 'status': 'ACTIVE'}
             if branch:
                 query['branch'] = branch
-            return FingerprintDevice.objects.get(**query)
+            if level:
+                # Find devices where the level is in the levels list
+                devices = FingerprintDevice.objects.filter(**query)
+                for device in devices:
+                    if device.levels and level in device.levels:
+                        return device
+                return None
+            else:
+                # If no level specified, return first matching device
+                return FingerprintDevice.objects.filter(**query).first()
         except FingerprintDevice.DoesNotExist:
             return None
 
@@ -102,8 +147,12 @@ class Attendance(models.Model):
     def create_attendance(cls, student, attendance_type, timestamp, device=None):
         """Create attendance record with automatic device assignment"""
         if not device:
-            # Automatically assign device based on student's grade and branch
-            device = FingerprintDevice.get_device_for_grade(student.grade, student.branch)
+            # Automatically assign device based on student's grade, branch, and level
+            device = FingerprintDevice.get_device_for_grade(
+                student.grade, 
+                student.branch, 
+                student.level
+            )
         
         # Calculate attendance status for CHECK_IN records
         status = None
@@ -214,7 +263,7 @@ class AttendanceSettings(models.Model):
     @classmethod
     def get_settings(cls):
         """Get the single settings instance, create if doesn't exist"""
-        settings, created = cls.objects.get_or_create(
+        settings, _ = cls.objects.get_or_create(
             pk=1,
             defaults={
                 'attendance_start_time': '08:00',

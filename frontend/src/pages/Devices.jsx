@@ -232,16 +232,18 @@ function Devices() {
     { id: 'ip_address', label: t('devices.ipAddress'), sortable: true },
     { id: 'branch', label: t('branches.title'), sortable: true },
     { id: 'grade_category', label: t('devices.gradeCategory'), sortable: true },
+    { id: 'levels', label: t('devices.levels'), sortable: false },
     { id: 'status', label: t('devices.status'), sortable: true },
     { id: 'connection', label: t('devices.connection'), sortable: true },
   ]
 
   const getTagColor = (grade) => {
     const colors = {
-      PRIMARY: '#0ABAB5',
-      SECONDARY: '#FF6B9D',
-      HIGH_SCHOOL: '#4CAF50',
       KINDERGARTEN: '#FF9800',
+      PRIMARY: '#0ABAB5',
+      INTERMEDIATE: '#9C27B0',
+      SECONDARY: '#FF6B9D',
+      AMERICAN_DIPLOMA: '#4CAF50',
     }
     return colors[grade] || '#9E9E9E'
   }
@@ -253,6 +255,9 @@ function Devices() {
     ip_address: `${device.ip_address}:${device.port}`,
     branch: device.branch?.name || '-',
     grade_category: device.grade_category,
+    levels: device.levels && device.levels.length > 0 
+      ? device.levels.map(level => t(`students.levels.${level}`)).join(', ')
+      : '-',
     status: device.status,
     connection: device.is_connected ? t('devices.connected') : t('devices.disconnected'),
     isFavorite: false,
@@ -270,6 +275,13 @@ function Devices() {
           label: t('devices.gradeCategory'),
           chip: true,
           chipColor: getTagColor(selectedDevice.grade_category),
+        },
+        {
+          key: 'levels',
+          label: t('devices.levels'),
+          getValue: () => selectedDevice.levels && selectedDevice.levels.length > 0
+            ? selectedDevice.levels.map(level => t(`students.levels.${level}`)).join(', ')
+            : '-',
         },
         { key: 'serial_number', label: t('devices.serialNumber'), getValue: () => selectedDevice.serial_number || '-' },
         {

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import logoImage from '../logo.jpg'
 import {
   Box,
   Drawer,
@@ -69,14 +70,10 @@ const LogoBox = styled(Box)(({ theme, collapsed }) => ({
   },
 }))
 
-const LogoCircle = styled(Box)(({ theme }) => ({
+const LogoImage = styled('img')(({ theme }) => ({
   width: 40,
   height: 40,
-  borderRadius: '50%',
-  backgroundColor: theme.palette.primary.main,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
+  objectFit: 'contain',
   transition: 'transform 0.3s ease',
   flexShrink: 0,
 }))
@@ -250,30 +247,38 @@ function Layout({ children }) {
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <LogoBox collapsed={collapsed} onClick={() => navigate('/')}>
-        <LogoCircle className="logo-circle">
-          <Typography
-            variant="h6"
-            sx={{
-              color: 'white',
-              fontWeight: 700,
-              fontSize: '1.2rem',
-            }}
-          >
-            S
-          </Typography>
-        </LogoCircle>
+        <LogoImage 
+          src={logoImage} 
+          alt="School Logo" 
+          className="logo-circle"
+        />
         {!collapsed && (
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 700,
-              color: '#1a1a1a',
-              fontSize: '1.25rem',
-              whiteSpace: 'nowrap',
-            }}
-          >
-          {t('navigation.schoolHub')}
-          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+            <Typography
+              variant="h6"
+              component="div"
+              sx={{
+                fontWeight: 700,
+                color: '#1a1a1a',
+                fontSize: '1.25rem',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {language === 'en' ? 'Qurtubah Al-Ahliyah' : 'مدرسة قرطبة'}
+            </Typography>
+            <Typography
+              variant="h6"
+              component="div"
+              sx={{
+                fontWeight: 700,
+                color: '#1a1a1a',
+                fontSize: '1.25rem',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {language === 'en' ? 'School' : 'الأهلية'}
+            </Typography>
+          </Box>
         )}
         {!collapsed && (
           <IconButton

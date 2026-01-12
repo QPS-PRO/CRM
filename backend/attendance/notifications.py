@@ -5,6 +5,7 @@ WhatsApp and SMS notification services for attendance alerts
 """
 from typing import List, Dict, Optional
 import requests
+import pytz
 from django.conf import settings
 from django.utils import timezone
 from core.models import Student, Parent
@@ -122,8 +123,18 @@ class WhatsAppNotificationService:
     def _format_attendance_message(self, student: Student, attendance: Attendance) -> str:
         """Format the attendance notification message"""
         attendance_type = 'checked in' if attendance.attendance_type == 'CHECK_IN' else 'checked out'
-        time_str = attendance.timestamp.strftime('%I:%M %p')
-        date_str = attendance.timestamp.strftime('%B %d, %Y')
+        
+        # Convert timestamp to KSA timezone (UTC+3) for display
+        ksa_tz = pytz.timezone('Asia/Riyadh')
+        if timezone.is_aware(attendance.timestamp):
+            timestamp_ksa = attendance.timestamp.astimezone(ksa_tz)
+        else:
+            # If naive, assume it's in UTC and make it aware, then convert to KSA
+            timestamp_utc = timezone.make_aware(attendance.timestamp, pytz.UTC)
+            timestamp_ksa = timestamp_utc.astimezone(ksa_tz)
+        
+        time_str = timestamp_ksa.strftime('%I:%M %p')
+        date_str = timestamp_ksa.strftime('%B %d, %Y')
         
         message = "📚 *Qurtubah School*\n\n"
         message += f"Hello! Your child *{student.full_name}* has {attendance_type} at {time_str} on {date_str}.\n\n"
@@ -362,8 +373,17 @@ class SMSNotificationService:
         settings = AttendanceSettings.get_settings()
         template = settings.sms_template
         
-        # Format time
-        time_str = attendance.timestamp.strftime('%I:%M %p')
+        # Convert timestamp to KSA timezone (UTC+3) for display
+        ksa_tz = pytz.timezone('Asia/Riyadh')
+        if timezone.is_aware(attendance.timestamp):
+            timestamp_ksa = attendance.timestamp.astimezone(ksa_tz)
+        else:
+            # If naive, assume it's in UTC and make it aware, then convert to KSA
+            timestamp_utc = timezone.make_aware(attendance.timestamp, pytz.UTC)
+            timestamp_ksa = timestamp_utc.astimezone(ksa_tz)
+        
+        # Format time in KSA timezone
+        time_str = timestamp_ksa.strftime('%I:%M %p')
         
         # Get parent name
         parent_name = parent.first_name if parent and parent.first_name else "Parent"

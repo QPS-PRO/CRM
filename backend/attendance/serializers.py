@@ -11,7 +11,7 @@ class FingerprintDeviceSerializer(serializers.ModelSerializer):
         model = FingerprintDevice
         fields = [
             'id', 'name', 'model', 'ip_address', 'port', 'serial_number',
-            'branch', 'branch_id', 'grade_category', 'status', 'last_sync', 'is_connected',
+            'branch', 'branch_id', 'grade_category', 'levels', 'status', 'last_sync', 'is_connected',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'last_sync']
@@ -71,9 +71,13 @@ class AttendanceSerializer(serializers.ModelSerializer):
             student = Student.objects.get(id=student_id)
             validated_data['student'] = student
             
-            # Auto-assign device based on student grade and branch if not provided
+            # Auto-assign device based on student grade, branch, and level if not provided
             if not device_id:
-                device = FingerprintDevice.get_device_for_grade(student.grade, student.branch)
+                device = FingerprintDevice.get_device_for_grade(
+                    student.grade, 
+                    student.branch, 
+                    student.level
+                )
                 if device:
                     validated_data['device'] = device
         

@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "مركز المدرسة",
+    "appName": "مدرسة قرطبة الأهلية",
     "home": "الرئيسية",
     "createNew": "إنشاء جديد",
     "edit": "تعديل",
@@ -47,7 +47,7 @@
   },
   "auth": {
     "signIn": "تسجيل الدخول",
-    "signInToAccount": "قم بتسجيل الدخول إلى حسابك",
+    "crm": "إدارة علاقات العملاء",
     "username": "اسم المستخدم",
     "password": "كلمة المرور",
     "loginFailed": "فشل تسجيل الدخول",
@@ -118,10 +118,11 @@
     "addParent": "إضافة ولي أمر",
     "newParent": "ولي أمر جديد",
     "grades": {
-      "primary": "ابتدائي",
-      "secondary": "متوسط",
-      "highSchool": "ثانوي",
-      "kindergarten": "روضة"
+      "kindergarten": "الروضة",
+      "primary": "الابتدائي",
+      "intermediate": "المتوسط",
+      "secondary": "الثانوي",
+      "americanDiploma": "الدبلومه الامريكيه"
     },
     "genders": {
       "male": "ذكر",
@@ -172,6 +173,8 @@
     "allClasses": "جميع الفصول",
     "allStatuses": "جميع الحالات",
     "filterByStatus": "تصفية حسب الحالة",
+    "filterByDevice": "تصفية حسب الجهاز",
+    "allDevices": "جميع الأجهزة",
     "name": "الاسم",
     "type": "النوع",
     "status": "الحالة",
@@ -202,6 +205,8 @@
     "port": "المنفذ",
     "serialNumber": "الرقم التسلسلي",
     "gradeCategory": "المرحلة",
+    "levels": "الصفوف",
+    "modelHelper": "اسم نوع الجهاز (مثال: ZK702)",
     "status": "الحالة",
     "connection": "الاتصال",
     "connected": "متصل",
