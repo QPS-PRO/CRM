@@ -38,11 +38,11 @@ class FingerprintDevice(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Fingerprint Device'
         verbose_name_plural = 'Fingerprint Devices'
-        # Note: Uniqueness for (branch, grade_category, levels) is enforced in clean() method
-        # since JSONField uniqueness constraints are not reliably supported across all databases
+        # Note: Multiple devices can share the same (branch, grade_category, levels) combination
+        # to allow for backup devices
 
     def clean(self):
-        """Validate that levels is a list of integers between 1 and 12, and check uniqueness"""
+        """Validate that levels is a list of integers between 1 and 12"""
         # Validate levels format
         if not isinstance(self.levels, list):
             raise ValidationError("Levels must be a list")
@@ -57,19 +57,8 @@ class FingerprintDevice(models.Model):
         # Remove duplicates and sort
         self.levels = sorted(set(self.levels))
         
-        # Check uniqueness: branch + grade_category + levels combination
-        existing = FingerprintDevice.objects.filter(
-            branch=self.branch,
-            grade_category=self.grade_category,
-            levels=self.levels
-        ).exclude(pk=self.pk if self.pk else None)
-        
-        if existing.exists():
-            levels_str = ', '.join(map(str, self.levels))
-            raise ValidationError(
-                f"A device already exists for branch '{self.branch}', "
-                f"grade '{self.grade_category}', and levels [{levels_str}]"
-            )
+        # Note: Multiple devices can now share the same branch, grade_category, and levels
+        # This allows for backup devices
 
     def save(self, *args, **kwargs):
         """Override save to call clean()"""
