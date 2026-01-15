@@ -158,7 +158,7 @@
       "status": "Status"
     }
   },
-  "attendance": {
+    "attendance": {
     "title": "Attendance",
     "attendanceDashboard": "Attendance Dashboard",
     "attendanceLogs": "Attendance Logs",
@@ -181,6 +181,7 @@
     "type": "Type",
     "status": "Status",
     "statusAttended": "Attended",
+    "statusPresent": "Present",
     "statusLate": "Late",
     "statusAbsent": "Absent",
     "dateTime": "Date & Time",
@@ -369,6 +370,7 @@
     "summary": "Summary",
     "totalStudents": "Total Students",
     "present": "Present",
+    "late": "Late",
     "absent": "Absent",
     "attendanceRate": "Attendance Rate",
     "studentList": "Student List",

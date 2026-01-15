@@ -23,6 +23,7 @@ import { getSMSLogs, getSMSStatistics, deleteSMSLog } from '../api/smsLogs'
 import { getBranches } from '../api/branches'
 import DataTable from '../components/DataTable'
 import { format } from 'date-fns'
+import { formatTimestampInOriginalTimezone } from '../utils/dateFormat'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
@@ -173,7 +174,7 @@ function SMSLogs() {
     parent_name: log.parent?.full_name || '-',
     phone_number: log.phone_number || '-',
     attendance_time: log.attendance?.timestamp
-      ? format(new Date(log.attendance.timestamp), 'dd MMM, yyyy HH:mm')
+      ? formatTimestampInOriginalTimezone(log.attendance.timestamp, 'dd MMM, yyyy HH:mm')
       : '-',
     status: getStatusChip(log.status),
     sent_at: log.sent_at ? format(new Date(log.sent_at), 'dd MMM, yyyy HH:mm') : '-',

@@ -156,7 +156,7 @@
       "status": "الحالة"
     }
   },
-  "attendance": {
+    "attendance": {
     "title": "الحضور",
     "attendanceDashboard": "لوحة تحكم الحضور",
     "attendanceLogs": "سجلات الحضور",
@@ -179,6 +179,7 @@
     "type": "النوع",
     "status": "الحالة",
     "statusAttended": "حاضر",
+    "statusPresent": "حاضر",
     "statusLate": "متأخر",
     "statusAbsent": "غائب",
     "dateTime": "التاريخ والوقت",
@@ -364,6 +365,7 @@
     "summary": "ملخص",
     "totalStudents": "إجمالي الطلاب",
     "present": "حاضر",
+    "late": "متأخر",
     "absent": "غائب",
     "attendanceRate": "معدل الحضور",
     "studentList": "قائمة الطلاب",

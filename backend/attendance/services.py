@@ -193,13 +193,11 @@ class ZKtecoDeviceService:
                     device_timestamp = att.timestamp
                     if timezone.is_naive(device_timestamp):
                         # Device timestamp is naive (no timezone info)
-                        # IMPORTANT: The device stores time in its LOCAL timezone (e.g., UTC+2 for Cairo)
+                        # IMPORTANT: The device stores time in its LOCAL timezone
                         # We need to localize it to the device's timezone, then convert to UTC for storage
+                        from .utils import get_device_timezone
                         import pytz
-                        # Device timezone - CHANGE THIS to match your device's actual timezone
-                        # Based on 2-hour difference (21:45 -> 23:45), device is likely in UTC+2 (Cairo/Egypt)
-                        # If your device is in a different timezone, change this accordingly
-                        device_tz = pytz.timezone('Africa/Cairo')  # UTC+2 - adjust if different
+                        device_tz = get_device_timezone()  # Get timezone from Django settings
                         # Localize the naive timestamp to device's timezone
                         device_timestamp = device_tz.localize(device_timestamp)
                         # Convert to UTC for database storage (Django stores datetimes in UTC)

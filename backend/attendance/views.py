@@ -277,8 +277,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         import pytz
         from datetime import datetime, timedelta
         
-        # Get today's date in device timezone (Africa/Cairo) for consistency
-        device_tz = pytz.timezone('Africa/Cairo')
+        # Get today's date in device timezone for consistency
+        from .utils import get_device_timezone
+        device_tz = get_device_timezone()
         today_utc = timezone.now()
         today_local = today_utc.astimezone(device_tz).date()
         
@@ -437,8 +438,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         
         # Get daily breakdown
         daily_data = []
-        import pytz
-        device_tz = pytz.timezone('Africa/Cairo')
+        from .utils import get_device_timezone
+        device_tz = get_device_timezone()
         
         for i in range(num_days):
             date = start_date + timedelta(days=i)
@@ -613,14 +614,45 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             student_attendances = attendance_query.filter(student=student)
             
             # Check if student has any check-ins in the date range
-            has_attended = student_attendances.filter(attendance_type='CHECK_IN').exists()
+            check_ins = student_attendances.filter(attendance_type='CHECK_IN')
+            has_attended = check_ins.exists()
+            
+            # Determine the best status for this student (ATTENDED > LATE > ABSENT)
+            # Status priority: ATTENDED = 3, LATE = 2, ABSENT = 1, None = 0
+            best_status = 'ABSENT'
+            best_priority = 0
+            
+            if has_attended:
+                for attendance in check_ins:
+                    status = attendance.status
+                    if status == 'ATTENDED':
+                        priority = 3
+                    elif status == 'LATE':
+                        priority = 2
+                    elif status == 'ABSENT':
+                        priority = 1
+                    else:
+                        priority = 0
+                    
+                    # Keep the highest priority status
+                    if priority > best_priority:
+                        best_priority = priority
+                        best_status = status if status else 'ABSENT'
+            
+            # Map status to display value
+            if best_status == 'ATTENDED':
+                attendance_status_display = 'Present'
+            elif best_status == 'LATE':
+                attendance_status_display = 'Late'
+            else:
+                attendance_status_display = 'Absent'
             
             # Get first check-in and last check-out if any
-            first_check_in = student_attendances.filter(attendance_type='CHECK_IN').order_by('timestamp').first()
+            first_check_in = check_ins.order_by('timestamp').first()
             last_check_out = student_attendances.filter(attendance_type='CHECK_OUT').order_by('-timestamp').first()
             
             # Count total check-ins and check-outs
-            check_in_count = student_attendances.filter(attendance_type='CHECK_IN').count()
+            check_in_count = check_ins.count()
             check_out_count = student_attendances.filter(attendance_type='CHECK_OUT').count()
             
             report_data.append({
@@ -635,7 +667,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     'name': student.branch.name
                 },
                 'has_attended': has_attended,
-                'attendance_status': 'Present' if has_attended else 'Absent',
+                'attendance_status': attendance_status_display,
+                'attendance_status_code': best_status,
                 'first_check_in': first_check_in.timestamp.isoformat() if first_check_in else None,
                 'last_check_out': last_check_out.timestamp.isoformat() if last_check_out else None,
                 'check_in_count': check_in_count,
@@ -645,8 +678,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         
         # Calculate summary statistics
         total_students = len(report_data)
-        present_count = sum(1 for item in report_data if item['has_attended'])
-        absent_count = total_students - present_count
+        present_count = sum(1 for item in report_data if item['attendance_status_code'] == 'ATTENDED')
+        late_count = sum(1 for item in report_data if item['attendance_status_code'] == 'LATE')
+        absent_count = sum(1 for item in report_data if item['attendance_status_code'] == 'ABSENT')
         
         return Response({
             'date_from': date_from,
@@ -660,6 +694,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             'summary': {
                 'total_students': total_students,
                 'present': present_count,
+                'late': late_count,
                 'absent': absent_count,
                 'attendance_rate': round((present_count / total_students * 100), 2) if total_students > 0 else 0,
             },

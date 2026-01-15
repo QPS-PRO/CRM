@@ -21,6 +21,7 @@ import { getBranches } from '../api/branches'
 import { getDevices } from '../api/devices'
 import DataTable from '../components/DataTable'
 import { format } from 'date-fns'
+import { formatTimestampInOriginalTimezone } from '../utils/dateFormat'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import html2canvas from 'html2canvas'
@@ -125,7 +126,7 @@ function Attendance() {
   const getStatusLabel = (status) => {
     if (!status) return '-'
     const statusMap = {
-      'ATTENDED': t('attendance.statusAttended'),
+      'ATTENDED': t('attendance.statusPresent'),
       'LATE': t('attendance.statusLate'),
       'ABSENT': t('attendance.statusAbsent'),
     }
@@ -145,10 +146,11 @@ function Attendance() {
     id: record.id,
     name: record.student?.full_name || '-',
     type: record.attendance_type === 'CHECK_IN' ? t('attendance.checkIn') : t('attendance.checkOut'),
-    status: record.status || (record.attendance_type === 'CHECK_IN' ? '-' : null),
+    status: getStatusLabel(record.status), // Use translated label instead of raw status
     statusLabel: getStatusLabel(record.status),
     statusColor: getStatusColor(record.status),
-    timestamp: format(new Date(record.timestamp), 'dd MMM, yyyy HH:mm'),
+    statusRaw: record.status || (record.attendance_type === 'CHECK_IN' ? '-' : null), // Keep raw status for sorting/filtering
+    timestamp: formatTimestampInOriginalTimezone(record.timestamp, 'dd MMM, yyyy HH:mm'),
     device: record.device?.name || 'N/A',
     branch: record.student?.branch?.name || '-',
     grade: record.student?.grade || '-',
@@ -290,8 +292,8 @@ function Attendance() {
             <tr style="background-color: ${bgColor};">
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${record.student?.full_name || '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${record.attendance_type === 'CHECK_IN' ? t('attendance.checkIn') : t('attendance.checkOut')}</td>
-              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${record.status ? (record.status === 'ATTENDED' ? t('attendance.statusAttended') : record.status === 'LATE' ? t('attendance.statusLate') : t('attendance.statusAbsent')) : '-'}</td>
-              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${format(new Date(record.timestamp), 'dd/MM/yyyy HH:mm')}</td>
+              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${record.status ? (record.status === 'ATTENDED' ? t('attendance.statusPresent') : record.status === 'LATE' ? t('attendance.statusLate') : t('attendance.statusAbsent')) : '-'}</td>
+              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${formatTimestampInOriginalTimezone(record.timestamp, 'dd/MM/yyyy HH:mm')}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${record.student?.branch?.name || '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${record.student?.grade || '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${record.student?.level || '-'}</td>
@@ -414,7 +416,7 @@ function Attendance() {
         const getStatusLabel = (status) => {
           if (!status) return '-'
           const statusMap = {
-            'ATTENDED': t('attendance.statusAttended'),
+            'ATTENDED': t('attendance.statusPresent'),
             'LATE': t('attendance.statusLate'),
             'ABSENT': t('attendance.statusAbsent'),
           }
@@ -425,7 +427,7 @@ function Attendance() {
           record.student?.full_name || '-',
           record.attendance_type === 'CHECK_IN' ? t('attendance.checkIn') : t('attendance.checkOut'),
           getStatusLabel(record.status),
-          format(new Date(record.timestamp), 'dd/MM/yyyy HH:mm'),
+          formatTimestampInOriginalTimezone(record.timestamp, 'dd/MM/yyyy HH:mm'),
           record.student?.branch?.name || '-',
           record.student?.grade || '-',
           record.student?.level || '-',
@@ -607,7 +609,7 @@ function Attendance() {
             onChange={(e) => setSelectedStatus(e.target.value)}
           >
             <MenuItem value="">{t('attendance.allStatuses')}</MenuItem>
-            <MenuItem value="ATTENDED">{t('attendance.statusAttended')}</MenuItem>
+            <MenuItem value="ATTENDED">{t('attendance.statusPresent')}</MenuItem>
             <MenuItem value="LATE">{t('attendance.statusLate')}</MenuItem>
             <MenuItem value="ABSENT">{t('attendance.statusAbsent')}</MenuItem>
           </Select>
@@ -707,7 +709,7 @@ function Attendance() {
               fontWeight: 500,
             }}
           />,
-          row.status && row.status !== '-' && (
+          row.statusRaw && row.statusRaw !== '-' && row.statusRaw !== null && (
             <Chip
               key="status"
               label={row.statusLabel}

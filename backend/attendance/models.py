@@ -290,9 +290,9 @@ class AttendanceSettings(models.Model):
             check_in_datetime = timezone.make_aware(check_in_datetime)
         
         # Convert check_in_datetime from UTC to device's local timezone
-        # The device timezone is hardcoded in services.py as 'Africa/Cairo' (UTC+2)
-        # We use the same timezone here for consistency
-        device_tz = pytz.timezone('Africa/Cairo')  # Same as in services.py
+        # Use the same timezone utility as in services.py for consistency
+        from .utils import get_device_timezone
+        device_tz = get_device_timezone()
         
         # Convert UTC datetime to device's local timezone for comparison
         if timezone.is_aware(check_in_datetime):

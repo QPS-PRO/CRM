@@ -45,6 +45,14 @@ function Reports() {
   const { t } = useTranslation()
   const { language, isRTL } = useLanguage()
 
+  // Helper function to translate status
+  const getTranslatedStatus = (status) => {
+    if (status === 'Present') return t('attendance.statusPresent')
+    if (status === 'Late') return t('attendance.statusLate')
+    if (status === 'Absent') return t('attendance.statusAbsent')
+    return status
+  }
+
   const { data: branchesData } = useQuery({
     queryKey: ['branches'],
     queryFn: () => getBranches(),
@@ -183,6 +191,7 @@ function Reports() {
             <div style="font-size: 12px; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">
               <div style="font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${t('reports.totalStudents')}: ${reportData.summary.total_students}</div>
               <div style="font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${t('reports.present')}: ${reportData.summary.present}</div>
+              <div style="font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${t('reports.late')}: ${reportData.summary.late || 0}</div>
               <div style="font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${t('reports.absent')}: ${reportData.summary.absent}</div>
               <div style="font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${t('reports.attendanceRate')}: ${reportData.summary.attendance_rate}%</div>
             </div>
@@ -218,7 +227,7 @@ function Reports() {
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.grade}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.level || '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.class_name || '-'}</td>
-              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.attendance_status}</td>
+              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${getTranslatedStatus(student.attendance_status)}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.first_check_in ? format(new Date(student.first_check_in), 'dd/MM/yyyy HH:mm') : '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.check_in_count}</td>
             </tr>
@@ -334,8 +343,9 @@ function Reports() {
         doc.setFontSize(10)
         doc.text(`${t('reports.totalStudents')}: ${reportData.summary.total_students}`, 14, filterInfo.length > 0 ? 55 + filterInfo.length * 5 : 50)
         doc.text(`${t('reports.present')}: ${reportData.summary.present}`, 14, filterInfo.length > 0 ? 60 + filterInfo.length * 5 : 55)
-        doc.text(`${t('reports.absent')}: ${reportData.summary.absent}`, 14, filterInfo.length > 0 ? 65 + filterInfo.length * 5 : 60)
-        doc.text(`${t('reports.attendanceRate')}: ${reportData.summary.attendance_rate}%`, 14, filterInfo.length > 0 ? 70 + filterInfo.length * 5 : 65)
+        doc.text(`${t('reports.late')}: ${reportData.summary.late || 0}`, 14, filterInfo.length > 0 ? 65 + filterInfo.length * 5 : 60)
+        doc.text(`${t('reports.absent')}: ${reportData.summary.absent}`, 14, filterInfo.length > 0 ? 70 + filterInfo.length * 5 : 65)
+        doc.text(`${t('reports.attendanceRate')}: ${reportData.summary.attendance_rate}%`, 14, filterInfo.length > 0 ? 75 + filterInfo.length * 5 : 70)
         
         // Prepare table data
         const tableData = reportData.students.map((student) => [
@@ -345,14 +355,14 @@ function Reports() {
           student.grade,
           student.level || '-',
           student.class_name || '-',
-          student.attendance_status,
+          getTranslatedStatus(student.attendance_status),
           student.first_check_in ? format(new Date(student.first_check_in), 'dd/MM/yyyy HH:mm') : '-',
           student.check_in_count,
         ])
         
         // Add table
         autoTable(doc, {
-          startY: filterInfo.length > 0 ? 75 + filterInfo.length * 5 : 70,
+          startY: filterInfo.length > 0 ? 80 + filterInfo.length * 5 : 75,
           head: [[
             t('reports.studentName'),
             t('reports.studentId'),
@@ -582,7 +592,7 @@ function Reports() {
       {reportData && !isLoading && (
         <>
           <Grid container spacing={3} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2.4}>
               <Card>
                 <CardContent>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -594,7 +604,7 @@ function Reports() {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2.4}>
               <Card>
                 <CardContent>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -606,7 +616,19 @@ function Reports() {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {t('reports.late')}
+                  </Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#FFA500' }}>
+                    {reportData.summary.late || 0}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
               <Card>
                 <CardContent>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -618,7 +640,7 @@ function Reports() {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2.4}>
               <Card>
                 <CardContent>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -680,10 +702,13 @@ function Reports() {
                       <TableCell>{student.class_name || '-'}</TableCell>
                       <TableCell>
                         <Chip
-                          label={student.attendance_status}
+                          label={getTranslatedStatus(student.attendance_status)}
                           size="small"
                           sx={{
-                            backgroundColor: student.has_attended ? '#0ABAB5' : '#FF6B9D',
+                            backgroundColor: 
+                              student.attendance_status === 'Present' ? '#0ABAB5' :
+                              student.attendance_status === 'Late' ? '#FFA500' :
+                              '#FF6B9D',
                             color: 'white',
                             fontWeight: 600,
                           }}

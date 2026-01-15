@@ -124,17 +124,23 @@ class WhatsAppNotificationService:
         """Format the attendance notification message"""
         attendance_type = 'checked in' if attendance.attendance_type == 'CHECK_IN' else 'checked out'
         
-        # Convert timestamp to KSA timezone (UTC+3) for display
-        ksa_tz = pytz.timezone('Asia/Riyadh')
-        if timezone.is_aware(attendance.timestamp):
-            timestamp_ksa = attendance.timestamp.astimezone(ksa_tz)
-        else:
-            # If naive, assume it's in UTC and make it aware, then convert to KSA
-            timestamp_utc = timezone.make_aware(attendance.timestamp, pytz.UTC)
-            timestamp_ksa = timestamp_utc.astimezone(ksa_tz)
+        # Convert UTC timestamp to device's local timezone for display
+        # The timestamp is stored in UTC in the database, but we want to show the same time
+        # as displayed on the fingerprint device (local time)
+        from .utils import get_device_timezone
+        device_tz = get_device_timezone()
         
-        time_str = timestamp_ksa.strftime('%I:%M %p')
-        date_str = timestamp_ksa.strftime('%B %d, %Y')
+        # Ensure timestamp is timezone-aware (should be UTC from database)
+        if timezone.is_naive(attendance.timestamp):
+            timestamp = timezone.make_aware(attendance.timestamp)
+        else:
+            timestamp = attendance.timestamp
+        
+        # Convert from UTC to device's local timezone
+        local_timestamp = timestamp.astimezone(device_tz)
+        
+        time_str = local_timestamp.strftime('%I:%M %p')
+        date_str = local_timestamp.strftime('%B %d, %Y')
         
         message = "📚 *Qurtubah School*\n\n"
         message += f"Hello! Your child *{student.full_name}* has {attendance_type} at {time_str} on {date_str}.\n\n"
@@ -373,17 +379,23 @@ class SMSNotificationService:
         settings = AttendanceSettings.get_settings()
         template = settings.sms_template
         
-        # Convert timestamp to KSA timezone (UTC+3) for display
-        ksa_tz = pytz.timezone('Asia/Riyadh')
-        if timezone.is_aware(attendance.timestamp):
-            timestamp_ksa = attendance.timestamp.astimezone(ksa_tz)
-        else:
-            # If naive, assume it's in UTC and make it aware, then convert to KSA
-            timestamp_utc = timezone.make_aware(attendance.timestamp, pytz.UTC)
-            timestamp_ksa = timestamp_utc.astimezone(ksa_tz)
+        # Convert UTC timestamp to device's local timezone for display
+        # The timestamp is stored in UTC in the database, but we want to show the same time
+        # as displayed on the fingerprint device (local time)
+        from .utils import get_device_timezone
+        device_tz = get_device_timezone()
         
-        # Format time in KSA timezone
-        time_str = timestamp_ksa.strftime('%I:%M %p')
+        # Ensure timestamp is timezone-aware (should be UTC from database)
+        if timezone.is_naive(attendance.timestamp):
+            timestamp = timezone.make_aware(attendance.timestamp)
+        else:
+            timestamp = attendance.timestamp
+        
+        # Convert from UTC to device's local timezone
+        local_timestamp = timestamp.astimezone(device_tz)
+        
+        # Format time from local timezone timestamp
+        time_str = local_timestamp.strftime('%I:%M %p')
         
         # Get parent name
         parent_name = parent.first_name if parent and parent.first_name else "Parent"

@@ -51,7 +51,27 @@ class AttendanceSerializer(serializers.ModelSerializer):
     
     def to_representation(self, instance):
         """Recalculate status when serializing CHECK_IN records to ensure it's up-to-date"""
+        from django.utils import timezone
+        from .utils import get_device_timezone
+        
         representation = super().to_representation(instance)
+        
+        # Convert timestamp from UTC to device's local timezone for display
+        # This ensures the frontend receives the correct local time regardless of browser timezone
+        if instance.timestamp:
+            # Ensure timestamp is timezone-aware
+            if timezone.is_naive(instance.timestamp):
+                timestamp = timezone.make_aware(instance.timestamp)
+            else:
+                timestamp = instance.timestamp
+            
+            # Convert to device timezone
+            device_tz = get_device_timezone()
+            local_timestamp = timestamp.astimezone(device_tz)
+            
+            # Return ISO format string in device timezone (frontend will parse this correctly)
+            representation['timestamp'] = local_timestamp.isoformat()
+        
         # Always recalculate status for CHECK_IN records to ensure it's correct
         if instance.attendance_type == 'CHECK_IN':
             status = AttendanceSettings.calculate_attendance_status(instance.timestamp)

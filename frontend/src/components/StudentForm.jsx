@@ -18,6 +18,8 @@ import {
   Typography,
   Divider,
   Paper,
+  Autocomplete,
+  Popper,
 } from '@mui/material'
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material'
 import { useTranslation } from 'react-i18next'
@@ -36,6 +38,34 @@ const Grade = {
 const Gender = {
   M: 'M',
   F: 'F',
+}
+
+// Custom Popper component that always opens downward
+const CustomPopper = (props) => {
+  return (
+    <Popper
+      {...props}
+      placement="bottom-start"
+      modifiers={[
+        ...(props.modifiers || []),
+        {
+          name: 'flip',
+          enabled: false,
+        },
+        {
+          name: 'preventOverflow',
+          enabled: false,
+        },
+        {
+          name: 'offset',
+          enabled: true,
+          options: {
+            offset: [0, 4],
+          },
+        },
+      ]}
+    />
+  )
 }
 
 function StudentForm({ open, onClose, onSubmit, student = null, loading = false }) {
@@ -58,8 +88,12 @@ function StudentForm({ open, onClose, onSubmit, student = null, loading = false 
   const [showNewParentForm, setShowNewParentForm] = useState(false)
 
   const { data: parentsData } = useQuery({
-    queryKey: ['parents'],
-    queryFn: () => getParents(),
+    queryKey: ['parents', 'all'],
+    queryFn: async () => {
+      // Fetch all parents by using a large page_size
+      const response = await getParents({ page_size: 10000 })
+      return response
+    },
     enabled: open,
   })
 
@@ -117,16 +151,6 @@ function StudentForm({ open, onClose, onSubmit, student = null, loading = false 
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }))
-  }
-
-  const handleParentIdsChange = (event) => {
-    const {
-      target: { value },
-    } = event
-    setFormData((prev) => ({
-      ...prev,
-      parent_ids: typeof value === 'string' ? value.split(',') : value,
     }))
   }
 
@@ -294,36 +318,56 @@ function StudentForm({ open, onClose, onSubmit, student = null, loading = false 
                 </FormControl>
               </Grid>
               <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>{t('students.selectParents')}</InputLabel>
-                  <Select
-                    multiple
-                    name="parent_ids"
-                    value={formData.parent_ids}
-                    onChange={handleParentIdsChange}
-                    input={<OutlinedInput label="Parents" />}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => {
-                          const parent = parentsData?.results?.find((p) => p.id === value)
-                          return parent ? (
-                            <Chip
-                              key={value}
-                              label={`${parent.first_name} ${parent.last_name}`}
-                              size="small"
-                            />
-                          ) : null
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {parentsData?.results?.map((parent) => (
-                      <MenuItem key={parent.id} value={parent.id}>
-                        {parent.first_name} {parent.last_name} ({parent.email})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  multiple
+                  options={parentsData?.results || []}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'object' && option !== null) {
+                      return `${option.first_name} ${option.last_name}${option.email ? ` (${option.email})` : ''}`
+                    }
+                    // Fallback for when option is an ID (shouldn't happen, but just in case)
+                    const parent = parentsData?.results?.find((p) => p.id === option)
+                    return parent ? `${parent.first_name} ${parent.last_name}` : ''
+                  }}
+                  value={
+                    formData.parent_ids
+                      ? parentsData?.results?.filter((parent) => formData.parent_ids.includes(parent.id)) || []
+                      : []
+                  }
+                  onChange={(event, newValue) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      parent_ids: newValue.map((parent) => parent.id),
+                    }))
+                  }}
+                  filterSelectedOptions
+                  components={{
+                    Popper: CustomPopper,
+                  }}
+                  ListboxProps={{
+                    style: {
+                      maxHeight: '300px',
+                    },
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={t('students.selectParents')}
+                      placeholder={t('students.selectParents')}
+                    />
+                  )}
+                  renderTags={(value, getTagProps) =>
+                    value.map((parent, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={parent.id}
+                        label={`${parent.first_name} ${parent.last_name}`}
+                        size="small"
+                      />
+                    ))
+                  }
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                />
               </Grid>
 
               <Grid item xs={12}>
