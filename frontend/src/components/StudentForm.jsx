@@ -24,7 +24,7 @@ import {
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { getParents } from '../api/parents'
+import { getAllParents } from '../api/parents'
 import { getBranches } from '../api/branches'
 
 const Grade = {
@@ -90,9 +90,13 @@ function StudentForm({ open, onClose, onSubmit, student = null, loading = false 
   const { data: parentsData } = useQuery({
     queryKey: ['parents', 'all'],
     queryFn: async () => {
-      // Fetch all parents by using a large page_size
-      const response = await getParents({ page_size: 10000 })
-      return response
+      // Fetch all parents using the new API endpoint
+      const allParents = await getAllParents()
+      // Return in the same format as a paginated response for compatibility
+      return {
+        results: Array.isArray(allParents) ? allParents : [],
+        count: Array.isArray(allParents) ? allParents.length : 0,
+      }
     },
     enabled: open,
   })

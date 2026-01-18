@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -26,6 +26,7 @@ import {
 } from '@mui/material'
 import { getAttendanceReport } from '../api/attendance'
 import { getBranches } from '../api/branches'
+import { getStudents } from '../api/students'
 import { format } from 'date-fns'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -57,6 +58,34 @@ function Reports() {
     queryKey: ['branches'],
     queryFn: () => getBranches(),
   })
+
+  // Fetch available classes based on selected filters
+  const { data: classesData } = useQuery({
+    queryKey: ['students', 'classes', selectedBranch, selectedGrade, selectedLevel],
+    queryFn: () => {
+      const params = { page_size: 1000 } // Get enough students to extract all classes
+      if (selectedBranch) params.branch = selectedBranch
+      if (selectedGrade) params.grade = selectedGrade
+      if (selectedLevel) params.level = selectedLevel
+      return getStudents(params)
+    },
+    enabled: selectedBranch !== '' || selectedGrade !== '' || selectedLevel !== '', // Only fetch if at least one filter is selected
+    select: (data) => {
+      // Extract unique class names from the students data
+      if (!data?.results) return []
+      const classNames = data.results
+        .map((student) => student.class_name)
+        .filter((className) => className && className.trim() !== '')
+      return Array.from(new Set(classNames)).sort()
+    },
+  })
+
+  // Clear selected class if it's no longer in the available classes
+  useEffect(() => {
+    if (selectedClass && classesData && !classesData.includes(selectedClass)) {
+      setSelectedClass('')
+    }
+  }, [selectedClass, classesData])
 
   const handleDateRangeChange = (type) => {
     setDateRangeType(type)
@@ -168,10 +197,11 @@ function Reports() {
           }
           if (reportData.filters.grade) {
             const gradeLabels = {
-              PRIMARY: t('students.grades.primary'),
-              SECONDARY: t('students.grades.secondary'),
-              HIGH_SCHOOL: t('students.grades.highSchool'),
               KINDERGARTEN: t('students.grades.kindergarten'),
+              PRIMARY: t('students.grades.primary'),
+              INTERMEDIATE: t('students.grades.intermediate'),
+              SECONDARY: t('students.grades.secondary'),
+              AMERICAN_DIPLOMA: t('students.grades.americanDiploma'),
             }
             htmlContent += `<div style="font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${t('reports.grade')}: ${gradeLabels[reportData.filters.grade] || reportData.filters.grade}</div>`
           }
@@ -316,10 +346,11 @@ function Reports() {
         }
         if (reportData.filters.grade) {
           const gradeLabels = {
-            PRIMARY: t('students.grades.primary'),
-            SECONDARY: t('students.grades.secondary'),
-            HIGH_SCHOOL: t('students.grades.highSchool'),
             KINDERGARTEN: t('students.grades.kindergarten'),
+            PRIMARY: t('students.grades.primary'),
+            INTERMEDIATE: t('students.grades.intermediate'),
+            SECONDARY: t('students.grades.secondary'),
+            AMERICAN_DIPLOMA: t('students.grades.americanDiploma'),
           }
           filterInfo.push(`${t('reports.grade')}: ${gradeLabels[reportData.filters.grade] || reportData.filters.grade}`)
         }
@@ -396,10 +427,11 @@ function Reports() {
 
   const branches = branchesData?.results || []
   const grades = [
-    { value: 'PRIMARY', label: t('students.grades.primary') },
-    { value: 'SECONDARY', label: t('students.grades.secondary') },
-    { value: 'HIGH_SCHOOL', label: t('students.grades.highSchool') },
     { value: 'KINDERGARTEN', label: t('students.grades.kindergarten') },
+    { value: 'PRIMARY', label: t('students.grades.primary') },
+    { value: 'INTERMEDIATE', label: t('students.grades.intermediate') },
+    { value: 'SECONDARY', label: t('students.grades.secondary') },
+    { value: 'AMERICAN_DIPLOMA', label: t('students.grades.americanDiploma') },
   ]
   const levels = Array.from({ length: 12 }, (_, i) => ({
     value: i + 1,
@@ -497,7 +529,7 @@ function Reports() {
                 onChange={(e) => setSelectedClass(e.target.value)}
               >
                 <MenuItem value="">{t('reports.allClasses')}</MenuItem>
-                {reportData?.students && Array.from(new Set(reportData.students.map(s => s.class_name).filter(Boolean))).sort().map((class_name) => (
+                {classesData && classesData.map((class_name) => (
                   <MenuItem key={class_name} value={class_name}>
                     {class_name}
                   </MenuItem>

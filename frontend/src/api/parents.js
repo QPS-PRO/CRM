@@ -5,6 +5,11 @@ export const getParents = async (params) => {
   return response.data
 }
 
+export const getAllParents = async () => {
+  const response = await client.get('/core/parents/all/')
+  return response.data
+}
+
 export const getParent = async (id) => {
   const response = await client.get(`/core/parents/${id}/`)
   return response.data

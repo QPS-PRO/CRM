@@ -330,6 +330,25 @@ class SMSNotificationService:
             # Get ref_id for tracking
             ref_id = data.get('ref_id') if isinstance(data, dict) else None
             
+            # Extract timestamp from API response if available (format: "2026-01-18T10:45:30Z")
+            api_timestamp = None
+            if isinstance(data, dict) and data.get('timestamp'):
+                try:
+                    timestamp_str = data.get('timestamp')
+                    # Replace 'Z' with '+00:00' for ISO format parsing, or handle it directly
+                    if timestamp_str.endswith('Z'):
+                        timestamp_str = timestamp_str[:-1] + '+00:00'
+                    # Parse ISO format timestamp and make it timezone-aware
+                    from datetime import datetime as dt
+                    parsed_timestamp = dt.fromisoformat(timestamp_str)
+                    if timezone.is_naive(parsed_timestamp):
+                        api_timestamp = timezone.make_aware(parsed_timestamp, pytz.UTC)
+                    else:
+                        api_timestamp = parsed_timestamp
+                except (ValueError, AttributeError) as e:
+                    print(f"⚠ Warning: Failed to parse timestamp from API response: {e}")
+                    api_timestamp = None
+            
             if response_code == 100:
                 # Success - SMS sent successfully
                 print(f"✓ SMS sent successfully (Code: {response_code}, Ref ID: {ref_id})")
@@ -339,6 +358,7 @@ class SMSNotificationService:
                     'message': api_message or 'SMS sent successfully',
                     'ref_id': ref_id,
                     'status': 'SENT',
+                    'timestamp': api_timestamp,  # Include extracted timestamp
                     'response': result
                 }
             else:
@@ -470,10 +490,9 @@ class SMSNotificationService:
             # Determine status based on API response
             if result.get('success'):
                 status = 'SENT'
-                # Check if we can determine if it's delivered/received
-                # Mora API doesn't provide delivery status in initial response, so we use SENT
-                # In production, you might want to implement webhook/callback to update status
-                sent_at = timezone.now()
+                # Use timestamp from API response if available, otherwise use current time
+                # The API timestamp is the actual time the SMS was sent by the provider
+                sent_at = result.get('timestamp') or timezone.now()
                 print(f"✓ SMS sent successfully to {parent.full_name}")
                 results['sent'] += 1
             else:

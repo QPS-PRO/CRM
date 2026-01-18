@@ -31,6 +31,13 @@ class ParentViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'first_name', 'last_name']
     ordering = ['-created_at']
 
+    @action(detail=False, methods=['get'])
+    def all(self, request):
+        """Get all parents without pagination"""
+        parents = self.get_queryset()
+        serializer = self.get_serializer(parents, many=True)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['post'])
     def bulk_upload(self, request):
         """Bulk upload parents from Excel file"""
