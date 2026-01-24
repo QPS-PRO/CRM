@@ -1,4 +1,29 @@
 from django.db import models
+from django.contrib.auth.models import User
+
+
+class UserRole(models.TextChoices):
+    """User role choices"""
+    ADMIN = 'ADMIN', 'Admin'
+    VIEWER = 'VIEWER', 'Viewer'  # Can only view Dashboard and Reports
+
+
+class UserProfile(models.Model):
+    """Extended user profile with role"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.VIEWER)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} ({self.role})"
+
+    @property
+    def is_admin(self):
+        return self.role == UserRole.ADMIN or self.user.is_superuser or self.user.is_staff
 
 
 class Grade(models.TextChoices):

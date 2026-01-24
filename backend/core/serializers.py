@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Parent, Student, Branch
+from django.contrib.auth.models import User
+from .models import Parent, Student, Branch, UserProfile, UserRole
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -148,4 +149,42 @@ class StudentSerializer(serializers.ModelSerializer):
                 instance.parents.add(parent)
         
         return instance
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for User model"""
+    role = serializers.CharField(source='profile.role', read_only=True)
+    profile_id = serializers.IntegerField(source='profile.id', read_only=True)
+    
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'is_staff', 'is_superuser', 'role', 'profile_id', 'date_joined']
+        read_only_fields = ['id', 'is_staff', 'is_superuser', 'date_joined']
+
+
+class UserCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating users"""
+    password = serializers.CharField(write_only=True, min_length=8)
+    role = serializers.ChoiceField(choices=UserRole.choices, default=UserRole.VIEWER)
+    
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'password', 'role']
+        read_only_fields = ['id']
+    
+    def create(self, validated_data):
+        role = validated_data.pop('role')
+        password = validated_data.pop('password')
+        
+        # Create user
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data.get('email', ''),
+            password=password
+        )
+        
+        # Create profile with role
+        UserProfile.objects.create(user=user, role=role)
+        
+        return user
 

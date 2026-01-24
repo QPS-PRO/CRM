@@ -20,6 +20,7 @@ import Branches from './pages/Branches'
 import Reports from './pages/Reports'
 import SMSLogs from './pages/SMSLogs'
 import Settings from './pages/Settings'
+import Users from './pages/Users'
 
 // Create RTL cache
 const cacheRtl = createCache({
@@ -96,15 +97,16 @@ function AppContent() {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/attendance-dashboard" element={<Dashboard />} />
-                      <Route path="/students" element={<Students />} />
-                      <Route path="/parents" element={<Parents />} />
-                      <Route path="/attendance" element={<Attendance />} />
                       <Route path="/reports" element={<Reports />} />
-                      <Route path="/sms-logs" element={<SMSLogs />} />
-                      <Route path="/devices" element={<Devices />} />
-                      <Route path="/branches" element={<Branches />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="*" element={<Navigate to="/" replace />} />
+                      <Route path="/users" element={<ProtectedRoute requiredRole="ADMIN"><Users /></ProtectedRoute>} />
+                      <Route path="/students" element={<ProtectedRoute requiredRole="ADMIN"><Students /></ProtectedRoute>} />
+                      <Route path="/parents" element={<ProtectedRoute requiredRole="ADMIN"><Parents /></ProtectedRoute>} />
+                      <Route path="/attendance" element={<ProtectedRoute requiredRole="ADMIN"><Attendance /></ProtectedRoute>} />
+                      <Route path="/sms-logs" element={<ProtectedRoute requiredRole="ADMIN"><SMSLogs /></ProtectedRoute>} />
+                      <Route path="/devices" element={<ProtectedRoute requiredRole="ADMIN"><Devices /></ProtectedRoute>} />
+                      <Route path="/branches" element={<ProtectedRoute requiredRole="ADMIN"><Branches /></ProtectedRoute>} />
+                      <Route path="/settings" element={<ProtectedRoute requiredRole="ADMIN"><Settings /></ProtectedRoute>} />
+                      <Route path="*" element={<Navigate to="/attendance-dashboard" replace />} />
                     </Routes>
                   </Layout>
                 </ProtectedRoute>

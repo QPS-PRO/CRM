@@ -34,7 +34,8 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       const response = await loginAPI(username, password)
-      setUser(response.user)
+      // Refresh user data to ensure we have the latest role information
+      await checkAuth()
       return { success: true }
     } catch (error) {
       return {
@@ -60,6 +61,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     isAuthenticated: !!user,
+    isAdmin: user?.role === 'ADMIN' || user?.is_superuser || user?.is_staff || false,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

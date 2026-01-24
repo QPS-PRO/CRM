@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    ParentViewSet, StudentViewSet, BranchViewSet,
+    ParentViewSet, StudentViewSet, BranchViewSet, UserViewSet,
     login_view, logout_view, current_user_view
 )
 
@@ -9,6 +9,7 @@ router = DefaultRouter()
 router.register(r'branches', BranchViewSet, basename='branch')
 router.register(r'parents', ParentViewSet, basename='parent')
 router.register(r'students', StudentViewSet, basename='student')
+router.register(r'users', UserViewSet, basename='user')
 
 urlpatterns = [
     path('', include(router.urls)),

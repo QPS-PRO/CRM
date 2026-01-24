@@ -31,6 +31,7 @@ import BusinessIcon from '@mui/icons-material/Business'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import SmsIcon from '@mui/icons-material/Sms'
 import SettingsIcon from '@mui/icons-material/Settings'
+import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import ExpandLess from '@mui/icons-material/ExpandLess'
 import ExpandMore from '@mui/icons-material/ExpandMore'
 import MenuIcon from '@mui/icons-material/Menu'
@@ -122,60 +123,80 @@ const menuItems = (t) => [
   },
 ]
 
-const attendanceSubItems = (t) => [
-  {
-    text: t('navigation.attendanceDashboard'),
-    icon: <DashboardIcon />,
-    path: '/attendance-dashboard',
-  },
-  {
-    text: t('navigation.attendanceLogs'),
-    icon: <AccessTimeIcon />,
-    path: '/attendance',
-  },
-  {
-    text: t('navigation.devices'),
-    icon: <DevicesIcon />,
-    path: '/devices',
-  },
-  {
-    text: t('navigation.students'),
-    icon: <PeopleIcon />,
-    path: '/students',
-  },
-  {
-    text: t('navigation.parents'),
-    icon: <FamilyRestroomIcon />,
-    path: '/parents',
-  },
-  {
-    text: t('navigation.branches'),
-    icon: <BusinessIcon />,
-    path: '/branches',
-  },
-  {
-    text: t('navigation.smsLogs'),
-    icon: <SmsIcon />,
-    path: '/sms-logs',
-  },
-  {
-    text: t('navigation.reports'),
-    icon: <AssessmentIcon />,
-    path: '/reports',
-  },
-  {
-    text: t('navigation.settings'),
-    icon: <SettingsIcon />,
-    path: '/settings',
-  },
-]
+const attendanceSubItems = (t, isAdmin = true) => {
+  const allItems = [
+    {
+      text: t('navigation.attendanceDashboard'),
+      icon: <DashboardIcon />,
+      path: '/attendance-dashboard',
+      adminOnly: false,
+    },
+    {
+      text: t('navigation.attendanceLogs'),
+      icon: <AccessTimeIcon />,
+      path: '/attendance',
+      adminOnly: true,
+    },
+    {
+      text: t('navigation.devices'),
+      icon: <DevicesIcon />,
+      path: '/devices',
+      adminOnly: true,
+    },
+    {
+      text: t('navigation.students'),
+      icon: <PeopleIcon />,
+      path: '/students',
+      adminOnly: true,
+    },
+    {
+      text: t('navigation.parents'),
+      icon: <FamilyRestroomIcon />,
+      path: '/parents',
+      adminOnly: true,
+    },
+    {
+      text: t('navigation.branches'),
+      icon: <BusinessIcon />,
+      path: '/branches',
+      adminOnly: true,
+    },
+    {
+      text: t('navigation.smsLogs'),
+      icon: <SmsIcon />,
+      path: '/sms-logs',
+      adminOnly: true,
+    },
+    {
+      text: t('navigation.reports'),
+      icon: <AssessmentIcon />,
+      path: '/reports',
+      adminOnly: false,
+    },
+    {
+      text: t('navigation.settings'),
+      icon: <SettingsIcon />,
+      path: '/settings',
+      adminOnly: true,
+    },
+    {
+      text: t('navigation.users'),
+      icon: <PersonAddIcon />,
+      path: '/users',
+      adminOnly: true,
+    },
+  ]
+  
+  // Filter items based on admin status
+  return allItems.filter(item => isAdmin || !item.adminOnly)
+}
 
-const appItems = (t) => [
+const appItems = (t, isAdmin = true) => [
   {
     text: t('navigation.attendance'),
     icon: <AccessTimeIcon />,
     path: '/attendance',
-    subItems: attendanceSubItems(t),
+    subItems: attendanceSubItems(t, isAdmin),
   },
 ]
 
@@ -188,7 +209,7 @@ function Layout({ children }) {
   const [langAnchorEl, setLangAnchorEl] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const { t } = useTranslation()
   const { language, changeLanguage } = useLanguage()
 
@@ -352,9 +373,10 @@ function Layout({ children }) {
           })}
 
           {!collapsed && <SectionLabel collapsed={collapsed}>{t('navigation.apps')}</SectionLabel>}
-          {appItems(t).map((item) => {
+          {appItems(t, isAdmin).map((item) => {
             const hasSubItems = item.subItems && item.subItems.length > 0
-            const isSelected = location.pathname === item.path || (hasSubItems && item.subItems.some(subItem => location.pathname === subItem.path))
+            const filteredSubItems = hasSubItems ? attendanceSubItems(t, isAdmin) : []
+            const isSelected = location.pathname === item.path || (hasSubItems && filteredSubItems.some(subItem => location.pathname === subItem.path))
             const isOpen = item.text === t('navigation.attendance') ? attendanceOpen : appsOpen
             
             return (
@@ -395,7 +417,7 @@ function Layout({ children }) {
                 )}
                 <Collapse in={(isOpen || collapsed) && hasSubItems} timeout="auto" unmountOnExit>
                   <List component="div" disablePadding>
-                    {hasSubItems && item.subItems.map((subItem) => {
+                    {hasSubItems && filteredSubItems.map((subItem) => {
                       const subSelected = location.pathname === subItem.path
                       return (
                         <ListItem key={subItem.text} disablePadding>

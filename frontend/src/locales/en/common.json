@@ -43,7 +43,10 @@
     "failedToGeneratePDF": "Failed to generate PDF: {{error}}",
     "student": "this student",
     "rowsPerPage": "Rows per page:",
-    "of": "of"
+    "of": "of",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page"
   },
   "auth": {
     "signIn": "Sign In",
@@ -67,7 +70,8 @@
     "parents": "Parents",
     "branches": "Branches",
     "smsLogs": "SMS Logs",
-    "settings": "Settings"
+    "settings": "Settings",
+    "users": "Users"
   },
   "students": {
     "title": "Students",
@@ -426,6 +430,28 @@
     "syncFrequencyHelp": "Set how often to sync attendance from devices (format: hours:minutes:seconds)",
     "savedSuccessfully": "Settings saved successfully!",
     "failedToSave": "Failed to save settings"
+  },
+  "users": {
+    "title": "User Management",
+    "description": "Manage user accounts and their access permissions",
+    "createUser": "Create New User",
+    "username": "Username",
+    "email": "Email",
+    "password": "Password",
+    "passwordHelper": "Minimum 8 characters",
+    "role": "Role",
+    "roleAdmin": "Admin",
+    "roleViewer": "Viewer",
+    "dateJoined": "Date Joined",
+    "userCreated": "User created successfully!",
+    "userDeleted": "User deleted successfully!",
+    "failedToCreate": "Failed to create user",
+    "failedToDelete": "Failed to delete user",
+    "deleteUser": "Delete User",
+    "deleteUserConfirm": "Are you sure you want to delete user {{name}}? This action cannot be undone.",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page"
   }
 }
 

@@ -2,8 +2,8 @@ import { Navigate } from 'react-router-dom'
 import { Box, CircularProgress } from '@mui/material'
 import { useAuth } from '../contexts/AuthContext'
 
-function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth()
+function ProtectedRoute({ children, requiredRole = null }) {
+  const { isAuthenticated, loading, user } = useAuth()
 
   if (loading) {
     return (
@@ -22,6 +22,16 @@ function ProtectedRoute({ children }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  // Check role-based access
+  if (requiredRole) {
+    const userRole = user?.role || 'VIEWER'
+    const isAdmin = userRole === 'ADMIN' || user?.is_superuser || user?.is_staff
+    
+    if (requiredRole === 'ADMIN' && !isAdmin) {
+      return <Navigate to="/attendance-dashboard" replace />
+    }
   }
 
   return children

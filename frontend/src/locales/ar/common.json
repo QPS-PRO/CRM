@@ -43,7 +43,10 @@
     "failedToGeneratePDF": "فشل إنشاء PDF: {{error}}",
     "student": "هذا الطالب",
     "rowsPerPage": "صفوف في الصفحة:",
-    "of": "من"
+    "of": "من",
+    "previous": "السابق",
+    "next": "التالي",
+    "page": "صفحة"
   },
   "auth": {
     "signIn": "تسجيل الدخول",
@@ -67,7 +70,8 @@
     "parents": "أولياء الأمور",
     "branches": "الفروع",
     "smsLogs": "سجلات الرسائل النصية",
-    "settings": "الإعدادات"
+    "settings": "الإعدادات",
+    "users": "المستخدمين"
   },
   "students": {
     "title": "الطلاب",
@@ -423,6 +427,28 @@
     "syncFrequencyHelp": "تعيين عدد مرات مزامنة الحضور من الأجهزة (التنسيق: ساعات:دقائق:ثواني)",
     "savedSuccessfully": "تم حفظ الإعدادات بنجاح!",
     "failedToSave": "فشل حفظ الإعدادات"
+  },
+  "users": {
+    "title": "إدارة المستخدمين",
+    "description": "إدارة حسابات المستخدمين وصلاحيات الوصول",
+    "createUser": "إنشاء مستخدم جديد",
+    "username": "اسم المستخدم",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "passwordHelper": "الحد الأدنى 8 أحرف",
+    "role": "الدور",
+    "roleAdmin": "مدير",
+    "roleViewer": "مشاهد",
+    "dateJoined": "تاريخ الانضمام",
+    "userCreated": "تم إنشاء المستخدم بنجاح!",
+    "userDeleted": "تم حذف المستخدم بنجاح!",
+    "failedToCreate": "فشل إنشاء المستخدم",
+    "failedToDelete": "فشل حذف المستخدم",
+    "deleteUser": "حذف المستخدم",
+    "deleteUserConfirm": "هل أنت متأكد من حذف المستخدم {{name}}؟ لا يمكن التراجع عن هذا الإجراء.",
+    "previous": "السابق",
+    "next": "التالي",
+    "page": "صفحة"
   }
 }
 

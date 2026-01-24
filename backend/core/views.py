@@ -9,8 +9,8 @@ from django.db import transaction
 from openpyxl import load_workbook
 from datetime import datetime
 import re
-from .models import Parent, Student, Branch, Grade
-from .serializers import ParentSerializer, StudentSerializer, BranchSerializer
+from .models import Parent, Student, Branch, Grade, UserProfile, UserRole
+from .serializers import ParentSerializer, StudentSerializer, BranchSerializer, UserSerializer, UserCreateSerializer
 
 
 class BranchViewSet(viewsets.ModelViewSet):
@@ -346,6 +346,11 @@ def login_view(request):
     if user is not None:
         if user.is_active:
             login(request, user)
+            # Get or create profile to get role
+            profile, _ = UserProfile.objects.get_or_create(
+                user=user,
+                defaults={'role': UserRole.ADMIN if (user.is_superuser or user.is_staff) else UserRole.VIEWER}
+            )
             return Response({
                 'message': 'Login successful',
                 'user': {
@@ -353,6 +358,8 @@ def login_view(request):
                     'username': user.username,
                     'email': user.email,
                     'is_staff': user.is_staff,
+                    'is_superuser': user.is_superuser,
+                    'role': profile.role,
                 }
             })
         else:
@@ -380,11 +387,95 @@ def logout_view(request):
 def current_user_view(request):
     """Get current authenticated user"""
     user = request.user
+    # Get or create profile
+    profile, _ = UserProfile.objects.get_or_create(
+        user=user,
+        defaults={'role': UserRole.ADMIN if (user.is_superuser or user.is_staff) else UserRole.VIEWER}
+    )
     return Response({
         'id': user.id,
         'username': user.username,
         'email': user.email,
         'is_staff': user.is_staff,
         'is_superuser': user.is_superuser,
+        'role': profile.role,
     })
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """ViewSet for user management (admin only)"""
+    queryset = User.objects.all().select_related('profile')
+    serializer_class = UserSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['username', 'email']
+    ordering_fields = ['username', 'date_joined']
+    ordering = ['-date_joined']
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return UserCreateSerializer
+        return UserSerializer
+    
+    def get_permissions(self):
+        """Only admins can manage users"""
+        if self.action in ['list', 'create', 'retrieve', 'update', 'partial_update', 'destroy']:
+            permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [AllowAny]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        """Filter queryset based on permissions"""
+        user = self.request.user
+        # Only admins can see all users
+        if user.is_authenticated:
+            profile, _ = UserProfile.objects.get_or_create(
+                user=user,
+                defaults={'role': UserRole.ADMIN if (user.is_superuser or user.is_staff) else UserRole.VIEWER}
+            )
+            if profile.is_admin:
+                return self.queryset
+        return User.objects.none()
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new user (admin only)"""
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        profile, _ = UserProfile.objects.get_or_create(
+            user=user,
+            defaults={'role': UserRole.ADMIN if (user.is_superuser or user.is_staff) else UserRole.VIEWER}
+        )
+        
+        if not profile.is_admin:
+            return Response({'error': 'Only admins can create users'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user_instance = serializer.save()
+        
+        # Return the created user with role
+        response_serializer = UserSerializer(user_instance)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Delete a user (admin only, cannot delete self)"""
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        profile, _ = UserProfile.objects.get_or_create(
+            user=user,
+            defaults={'role': UserRole.ADMIN if (user.is_superuser or user.is_staff) else UserRole.VIEWER}
+        )
+        
+        if not profile.is_admin:
+            return Response({'error': 'Only admins can delete users'}, status=status.HTTP_403_FORBIDDEN)
+        
+        instance = self.get_object()
+        if instance.id == user.id:
+            return Response({'error': 'Cannot delete your own account'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return super().destroy(request, *args, **kwargs)
 
