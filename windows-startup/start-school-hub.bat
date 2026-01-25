@@ -1,7 +1,12 @@
 @echo off
 REM ============================================
 REM School Hub - Windows Startup Script
-REM This script starts the backend and frontend servers
+REM This script starts all required services:
+REM   - Redis Server (for Celery)
+REM   - Celery Worker (background tasks)
+REM   - Celery Beat (periodic tasks)
+REM   - Django Backend Server
+REM   - Vite Frontend Server
 REM ============================================
 
 REM Set the project root directory
@@ -53,9 +58,44 @@ REM Start PostgreSQL service (if running as Windows service)
 REM Uncomment the next line if PostgreSQL is installed as a Windows service
 REM net start postgresql-x64-15 >nul 2>&1
 
-REM Start Redis service (if running as Windows service)
-REM Uncomment the next line if Redis is installed as a Windows service
-REM net start redis >nul 2>&1
+REM Start Redis Server
+echo %GREEN%Starting Redis Server...%NC%
+REM Try to start Redis as Windows service first
+net start redis >nul 2>&1
+if errorlevel 1 (
+    REM If service doesn't exist, try to start redis-server executable
+    where redis-server >nul 2>&1
+    if not errorlevel 1 (
+        start "School Hub Redis" cmd /k "redis-server"
+        timeout /t 2 /nobreak >nul
+    ) else (
+        echo %YELLOW%Warning: Redis not found. Please ensure Redis is installed and running.%NC%
+        echo %YELLOW%Celery tasks may not work without Redis.%NC%
+    )
+) else (
+    echo Redis service started successfully.
+)
+timeout /t 2 /nobreak >nul
+
+REM Start Celery Worker
+echo %GREEN%Starting Celery Worker...%NC%
+REM Check if virtual environment exists and activate it, otherwise use system Python
+if exist "%PROJECT_ROOT%\backend\venv\Scripts\activate.bat" (
+    start "School Hub Celery Worker" cmd /k "cd /d %PROJECT_ROOT%\backend && call venv\Scripts\activate.bat && celery -A schoolhub worker --loglevel=info"
+) else (
+    start "School Hub Celery Worker" cmd /k "cd /d %PROJECT_ROOT%\backend && %PYTHON_PATH% -m celery -A schoolhub worker --loglevel=info"
+)
+timeout /t 3 /nobreak >nul
+
+REM Start Celery Beat
+echo %GREEN%Starting Celery Beat...%NC%
+REM Check if virtual environment exists and activate it, otherwise use system Python
+if exist "%PROJECT_ROOT%\backend\venv\Scripts\activate.bat" (
+    start "School Hub Celery Beat" cmd /k "cd /d %PROJECT_ROOT%\backend && call venv\Scripts\activate.bat && celery -A schoolhub beat --loglevel=info"
+) else (
+    start "School Hub Celery Beat" cmd /k "cd /d %PROJECT_ROOT%\backend && %PYTHON_PATH% -m celery -A schoolhub beat --loglevel=info"
+)
+timeout /t 3 /nobreak >nul
 
 REM Start Backend Server
 echo %GREEN%Starting Backend Server...%NC%
@@ -84,7 +124,12 @@ echo.
 echo The application windows will open automatically.
 echo You can close this window - the servers will continue running.
 echo.
-echo To stop the servers, close the "School Hub Backend" and "School Hub Frontend" windows.
+echo To stop the servers, close these windows:
+echo   - School Hub Backend
+echo   - School Hub Frontend
+echo   - School Hub Celery Worker
+echo   - School Hub Celery Beat
+echo   - School Hub Redis (if started as executable)
 echo.
 
 REM Keep window open for a moment to show messages

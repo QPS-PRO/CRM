@@ -14,6 +14,10 @@ REM Get the script directory
 set "SCRIPT_DIR=%~dp0"
 set "STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 
+REM Automatically unblock files if downloaded from internet (ZIP from GitHub)
+echo Checking and unblocking files (if downloaded from internet)...
+powershell.exe -ExecutionPolicy Bypass -Command "Get-ChildItem '%SCRIPT_DIR%*.bat', '%SCRIPT_DIR%*.vbs' | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
+
 echo This script will create a shortcut in your Windows Startup folder.
 echo.
 echo Startup folder location:
