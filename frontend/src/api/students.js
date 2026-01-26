@@ -41,3 +41,8 @@ export const bulkUploadStudents = async (file) => {
   return response.data
 }
 
+export const getClasses = async (params) => {
+  // Fetch unique class names directly from the backend endpoint
+  const response = await client.get('/core/students/classes/', { params })
+  return response.data
+}

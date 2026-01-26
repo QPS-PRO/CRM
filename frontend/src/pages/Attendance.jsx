@@ -19,6 +19,7 @@ import {
 import { getAttendanceRecords, deleteAttendanceRecord } from '../api/attendance'
 import { getBranches } from '../api/branches'
 import { getDevices } from '../api/devices'
+import { getClasses } from '../api/students'
 import DataTable from '../components/DataTable'
 import { format } from 'date-fns'
 import { formatTimestampInOriginalTimezone } from '../utils/dateFormat'
@@ -65,6 +66,26 @@ function Attendance() {
     queryKey: ['devices'],
     queryFn: () => getDevices({ page_size: 1000 }),
   })
+
+  // Fetch available classes based on selected filters (grade, branch, and optionally level)
+  const { data: classesData } = useQuery({
+    queryKey: ['students', 'classes', selectedBranch, selectedGrade, selectedLevel],
+    queryFn: () => {
+      const params = {}
+      if (selectedBranch) params.branch = selectedBranch
+      if (selectedGrade) params.grade = selectedGrade
+      if (selectedLevel) params.level = selectedLevel
+      return getClasses(params)
+    },
+    enabled: !!selectedGrade || !!selectedBranch, // Only fetch if grade or branch is selected
+  })
+
+  // Clear selected class if it's no longer in the available classes
+  useEffect(() => {
+    if (selectedClass && Array.isArray(classesData) && !classesData.includes(selectedClass)) {
+      setSelectedClass('')
+    }
+  }, [selectedClass, classesData])
 
   const { data, isLoading } = useQuery({
     queryKey: [
@@ -592,9 +613,10 @@ function Attendance() {
             value={selectedClass}
             label={t('attendance.filterByClass')}
             onChange={(e) => setSelectedClass(e.target.value)}
+            disabled={!selectedGrade && !selectedBranch}
           >
             <MenuItem value="">{t('attendance.allClasses')}</MenuItem>
-            {Array.from(new Set((data?.results || []).map(r => r.student?.class_name).filter(Boolean))).sort().map((class_name) => (
+            {Array.isArray(classesData) && classesData.map((class_name) => (
               <MenuItem key={class_name} value={class_name}>
                 {class_name}
               </MenuItem>

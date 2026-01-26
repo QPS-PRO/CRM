@@ -20,7 +20,7 @@ import {
   Typography,
   LinearProgress
 } from '@mui/material'
-import { getStudents, createStudent, updateStudent, deleteStudent, bulkUploadStudents } from '../api/students'
+import { getStudents, createStudent, updateStudent, deleteStudent, bulkUploadStudents, getClasses } from '../api/students'
 import { getBranches } from '../api/branches'
 import DataTable from '../components/DataTable'
 import StudentForm from '../components/StudentForm'
@@ -59,6 +59,26 @@ function Students() {
     queryKey: ['branches'],
     queryFn: () => getBranches(),
   })
+
+  // Fetch available classes based on selected filters (grade, branch, and optionally level)
+  const { data: classesData } = useQuery({
+    queryKey: ['students', 'classes', selectedBranch, selectedGrade, selectedLevel],
+    queryFn: () => {
+      const params = {}
+      if (selectedBranch) params.branch = selectedBranch
+      if (selectedGrade) params.grade = selectedGrade
+      if (selectedLevel) params.level = selectedLevel
+      return getClasses(params)
+    },
+    enabled: !!selectedGrade || !!selectedBranch, // Only fetch if grade or branch is selected
+  })
+
+  // Clear selected class if it's no longer in the available classes
+  useEffect(() => {
+    if (selectedClass && Array.isArray(classesData) && !classesData.includes(selectedClass)) {
+      setSelectedClass('')
+    }
+  }, [selectedClass, classesData])
 
   const { data, isLoading } = useQuery({
     queryKey: ['students', page, searchValue, selectedBranch, selectedGrade, selectedLevel, selectedClass],
@@ -405,9 +425,10 @@ function Students() {
             value={selectedClass}
             label={t('students.filterByClass')}
             onChange={(e) => setSelectedClass(e.target.value)}
+            disabled={!selectedGrade && !selectedBranch}
           >
             <MenuItem value="">{t('students.allClasses')}</MenuItem>
-            {Array.from(new Set(data?.results?.map(s => s.class_name).filter(Boolean) || [])).sort().map((class_name) => (
+            {Array.isArray(classesData) && classesData.map((class_name) => (
               <MenuItem key={class_name} value={class_name}>
                 {class_name}
               </MenuItem>

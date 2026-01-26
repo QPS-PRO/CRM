@@ -180,6 +180,37 @@ class StudentViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         return Response({'error': 'grade parameter is required'}, status=400)
 
+    @action(detail=False, methods=['get'])
+    def classes(self, request):
+        """Get unique class names filtered by branch, grade, and optionally level"""
+        queryset = self.queryset.filter(is_active=True)
+        
+        branch_id = request.query_params.get('branch')
+        grade = request.query_params.get('grade')
+        level = request.query_params.get('level')
+        
+        if branch_id:
+            try:
+                branch = Branch.objects.get(id=branch_id)
+                queryset = queryset.filter(branch=branch)
+            except Branch.DoesNotExist:
+                pass
+        
+        if grade:
+            queryset = queryset.filter(grade=grade)
+        
+        if level:
+            queryset = queryset.filter(level=level)
+        
+        # Get distinct class names, excluding empty/null values
+        class_names = queryset.values_list('class_name', flat=True)
+        # Filter out empty/null values and strip whitespace
+        class_names = [name.strip() for name in class_names if name and name.strip()]
+        # Use set to remove duplicates, then convert back to sorted list
+        class_names = sorted(set(class_names))
+        
+        return Response(class_names)
+
     @action(detail=False, methods=['post'])
     def bulk_upload(self, request):
         """Bulk upload students from Excel file"""

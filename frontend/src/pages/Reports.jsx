@@ -26,7 +26,7 @@ import {
 } from '@mui/material'
 import { getAttendanceReport } from '../api/attendance'
 import { getBranches } from '../api/branches'
-import { getStudents } from '../api/students'
+import { getClasses } from '../api/students'
 import { format } from 'date-fns'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -59,30 +59,22 @@ function Reports() {
     queryFn: () => getBranches(),
   })
 
-  // Fetch available classes based on selected filters
+  // Fetch available classes based on selected filters (grade, branch, and optionally level)
   const { data: classesData } = useQuery({
     queryKey: ['students', 'classes', selectedBranch, selectedGrade, selectedLevel],
     queryFn: () => {
-      const params = { page_size: 1000 } // Get enough students to extract all classes
+      const params = {}
       if (selectedBranch) params.branch = selectedBranch
       if (selectedGrade) params.grade = selectedGrade
       if (selectedLevel) params.level = selectedLevel
-      return getStudents(params)
+      return getClasses(params)
     },
-    enabled: selectedBranch !== '' || selectedGrade !== '' || selectedLevel !== '', // Only fetch if at least one filter is selected
-    select: (data) => {
-      // Extract unique class names from the students data
-      if (!data?.results) return []
-      const classNames = data.results
-        .map((student) => student.class_name)
-        .filter((className) => className && className.trim() !== '')
-      return Array.from(new Set(classNames)).sort()
-    },
+    enabled: !!selectedGrade || !!selectedBranch, // Only fetch if grade or branch is selected
   })
 
   // Clear selected class if it's no longer in the available classes
   useEffect(() => {
-    if (selectedClass && classesData && !classesData.includes(selectedClass)) {
+    if (selectedClass && Array.isArray(classesData) && !classesData.includes(selectedClass)) {
       setSelectedClass('')
     }
   }, [selectedClass, classesData])
@@ -527,9 +519,10 @@ function Reports() {
                 value={selectedClass}
                 label={t('reports.filterByClass')}
                 onChange={(e) => setSelectedClass(e.target.value)}
+                disabled={!selectedGrade && !selectedBranch}
               >
                 <MenuItem value="">{t('reports.allClasses')}</MenuItem>
-                {classesData && classesData.map((class_name) => (
+                {Array.isArray(classesData) && classesData.map((class_name) => (
                   <MenuItem key={class_name} value={class_name}>
                     {class_name}
                   </MenuItem>
