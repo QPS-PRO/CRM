@@ -1,14 +1,18 @@
 from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 
 from django.utils import timezone
 from django.db.models import Q, Max, Min, Count
 from django.db import models
+from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse, JsonResponse
 
 import pytz
 import traceback
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 from core.models import Student, Branch
@@ -876,3 +880,276 @@ class AttendanceSettingsViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
+
+
+@csrf_exempt
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+def iclock_cdata(request):
+    """
+    ZKTeco ADMS endpoint for receiving attendance data from devices.
+
+    This endpoint handles:
+    - GET requests: Device handshake/initialization
+    - POST requests: Attendance data push from device
+
+    Expected URL format: /iclock/cdata?SN=<serial_number>&table=<table_name>&OpStamp=<timestamp>
+    """
+    # Get device serial number from query parameters
+    serial_number = request.GET.get("SN", "").strip()
+    table = request.GET.get("table", "").strip()
+    op_stamp = request.GET.get("OpStamp", "").strip()
+
+    if not serial_number:
+        return HttpResponse("SN parameter is required", status=400)
+
+    # Try to find the device by serial number
+    try:
+        device = FingerprintDevice.objects.get(
+            serial_number=serial_number, status="ACTIVE"
+        )
+    except FingerprintDevice.DoesNotExist:
+        # Device not found - return error but don't fail completely
+        # Some devices might send data before being registered
+        print(
+            f"Warning: Device with serial number {serial_number} not found in database"
+        )
+        # Return OK to prevent device from retrying indefinitely
+        return HttpResponse("OK", status=200)
+
+    if request.method == "GET":
+        # GET request - device handshake/initialization
+        # Return device configuration or acknowledgment
+        response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+                        <Response>
+                            <Cmd>GetOptions</Cmd>
+                            <Status>OK</Status>
+                            <Options>
+                                <PushVersion>2.4.1</PushVersion>
+                                <Language>69</Language>
+                            </Options>
+                        </Response>"""
+        return HttpResponse(response_xml, content_type="application/xml", status=200)
+
+    elif request.method == "POST":
+        # POST request - attendance data push
+        try:
+            # Get raw request body
+            body = request.body.decode("utf-8") if request.body else ""
+
+            # Parse XML data if present
+            attendance_records = []
+            if body:
+                try:
+                    root = ET.fromstring(body)
+                    # ZKTeco devices send data in various formats
+                    # Format 1: <Record> elements with PIN, DateTime, Status
+                    for record in root.findall(".//Record"):
+                        user_id = None
+                        timestamp_str = None
+                        punch = "0"
+
+                        # Try different element names that ZKTeco devices use
+                        pin_elem = (
+                            record.find("PIN")
+                            or record.find("pin")
+                            or record.find("Pin")
+                        )
+                        if pin_elem is not None:
+                            user_id = pin_elem.text
+
+                        datetime_elem = (
+                            record.find("DateTime")
+                            or record.find("datetime")
+                            or record.find("DateTime")
+                            or record.find("time")
+                        )
+                        if datetime_elem is not None:
+                            timestamp_str = datetime_elem.text
+
+                        status_elem = (
+                            record.find("Status")
+                            or record.find("status")
+                            or record.find("punch")
+                            or record.find("Punch")
+                        )
+                        if status_elem is not None:
+                            punch = status_elem.text or "0"
+
+                        if user_id and timestamp_str:
+                            attendance_records.append(
+                                {
+                                    "user_id": user_id,
+                                    "timestamp_str": timestamp_str,
+                                    "punch": punch,
+                                }
+                            )
+
+                    # Format 2: Direct <PIN>, <DateTime>, <Status> elements at root level
+                    if not attendance_records:
+                        pin_elem = root.find("PIN") or root.find("pin")
+                        datetime_elem = root.find("DateTime") or root.find("datetime")
+                        status_elem = root.find("Status") or root.find("status")
+
+                        if pin_elem is not None and datetime_elem is not None:
+                            attendance_records.append(
+                                {
+                                    "user_id": pin_elem.text,
+                                    "timestamp_str": datetime_elem.text,
+                                    "punch": status_elem.text
+                                    if status_elem is not None
+                                    else "0",
+                                }
+                            )
+
+                except ET.ParseError as e:
+                    # If not XML, try to parse as plain text or other format
+                    # Some devices send data in different formats
+                    print(
+                        f"Could not parse XML data from device {serial_number}: {str(e)}"
+                    )
+                    print(f"Body content: {body[:500]}")
+
+            # If no records found in XML, try to parse from query parameters or body
+            if not attendance_records and table == "0PERL0G":
+                # 0PERL0G typically means attendance log table
+                # The data might be in the body in a different format
+                # For now, we'll log it and return OK
+                print(
+                    f"Received attendance data from device {serial_number}, table: {table}, OpStamp: {op_stamp}"
+                )
+                print(f"Body content: {body[:500] if body else 'Empty'}")
+
+            # Process attendance records
+            processed_count = 0
+            errors = []
+
+            for record in attendance_records:
+                try:
+                    user_id = record["user_id"]
+                    timestamp_str = record["timestamp_str"]
+                    punch = int(record["punch"]) if record["punch"].isdigit() else 0
+
+                    # Find student by user_id (could be student_id or student.id)
+                    student = None
+                    try:
+                        # Try matching by student_id first
+                        student = Student.objects.get(
+                            student_id=str(user_id), is_active=True
+                        )
+                    except Student.DoesNotExist:
+                        try:
+                            # Try matching by ID if user_id is numeric
+                            user_id_int = int(user_id)
+                            student = Student.objects.get(
+                                id=user_id_int, is_active=True
+                            )
+                        except (ValueError, Student.DoesNotExist):
+                            pass
+
+                    if not student:
+                        errors.append(f"Student not found for user_id: {user_id}")
+                        continue
+
+                    # Parse timestamp
+                    # ZKTeco devices typically send timestamp in format: YYYY-MM-DD HH:MM:SS
+                    try:
+                        # Try common ZKTeco timestamp formats
+                        timestamp = datetime.strptime(
+                            timestamp_str, "%Y-%m-%d %H:%M:%S"
+                        )
+                    except ValueError:
+                        try:
+                            timestamp = datetime.strptime(
+                                timestamp_str, "%Y/%m/%d %H:%M:%S"
+                            )
+                        except ValueError:
+                            try:
+                                timestamp = datetime.strptime(
+                                    timestamp_str, "%Y-%m-%dT%H:%M:%S"
+                                )
+                            except ValueError:
+                                # Fallback to current time if parsing fails
+                                timestamp = timezone.now()
+                                errors.append(
+                                    f"Could not parse timestamp: {timestamp_str}, using current time"
+                                )
+
+                    # Convert to timezone-aware datetime
+                    device_tz = get_device_timezone()
+                    if timezone.is_naive(timestamp):
+                        timestamp = device_tz.localize(timestamp)
+                    # Convert to UTC for storage
+                    timestamp = timestamp.astimezone(pytz.UTC)
+
+                    # Determine attendance type
+                    # Punch: 0 = Check-in, 1 = Check-out (may vary by device model)
+                    attendance_type = "CHECK_IN" if punch == 0 else "CHECK_OUT"
+
+                    # Check if record already exists (within 1 minute tolerance)
+                    time_tolerance = timedelta(minutes=1)
+                    existing = Attendance.objects.filter(
+                        student=student,
+                        timestamp__gte=timestamp - time_tolerance,
+                        timestamp__lte=timestamp + time_tolerance,
+                        attendance_type=attendance_type,
+                    ).first()
+
+                    if not existing:
+                        # Create attendance record
+                        attendance = Attendance.create_attendance(
+                            student=student,
+                            attendance_type=attendance_type,
+                            timestamp=timestamp,
+                            device=device,
+                        )
+
+                        # Send notifications
+                        try:
+                            sms_service = SMSNotificationService()
+                            sms_service.send_attendance_notification(attendance)
+                        except Exception as e:
+                            print(f"Error sending SMS notification: {str(e)}")
+
+                        processed_count += 1
+
+                except Exception as e:
+                    error_msg = f"Error processing record: {str(e)}"
+                    errors.append(error_msg)
+                    print(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+                    continue
+
+            # Update device last sync time
+            device.last_sync = timezone.now()
+            device.save(update_fields=["last_sync"])
+
+            # Return response in ZKTeco expected format
+            # ZKTeco devices expect XML response with status
+            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+                            <Response>
+                                <Cmd>Data</Cmd>
+                                <Status>OK</Status>
+                                <Processed>{processed_count}</Processed>
+                                <Errors>{len(errors)}</Errors>
+                            </Response>"""
+
+            return HttpResponse(
+                response_xml, content_type="application/xml", status=200
+            )
+
+        except Exception as e:
+            error_msg = f"Error processing attendance data from device {serial_number}: {str(e)}"
+            print(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+
+            # Return error response but still acknowledge receipt
+            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+                            <Response>
+                                <Cmd>Data</Cmd>
+                                <Status>ERROR</Status>
+                                <Message>{error_msg}</Message>
+                            </Response>"""
+            return HttpResponse(
+                response_xml, content_type="application/xml", status=200
+            )
+
+    return HttpResponse("Method not allowed", status=405)
