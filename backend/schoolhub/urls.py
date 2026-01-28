@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/attendance/', include('attendance.urls')),
     # ZKTeco ADMS endpoint for device push data
     path('iclock/cdata', iclock_cdata, name='iclock_cdata'),
+   
 ]
 
 if settings.DEBUG:
