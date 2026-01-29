@@ -1152,13 +1152,26 @@ def iclock_cdata(request):
                                 errors.append(
                                     f"Could not parse timestamp: {timestamp_str}, using current time"
                                 )
-
-                    # Convert to timezone-aware datetime
+                    
                     device_tz = get_device_timezone()
+                    
                     if timezone.is_naive(timestamp):
-                        timestamp = device_tz.localize(timestamp)
-                    # Convert to UTC for storage
-                    timestamp = timestamp.astimezone(pytz.UTC)
+                        timestamp_as_utc = pytz.UTC.localize(timestamp)
+                        timestamp_in_device_tz = timestamp_as_utc.astimezone(device_tz)
+                        timestamp = timestamp_in_device_tz
+                        
+                        print(f"   📅 Device sent: {timestamp_str}")
+                        print(f"   🌍 Interpreted as UTC: {timestamp_as_utc}")
+                        print(f"   🕐 Converted to device timezone: {timestamp} ({device_tz})")
+                    else:
+                        if timestamp.tzinfo == pytz.UTC:
+                            timestamp = timestamp.astimezone(device_tz)
+                        else:
+                            timestamp = timestamp.astimezone(device_tz)
+                    
+                    timestamp_utc = timestamp.astimezone(pytz.UTC)
+                    print(f"   💾 Final UTC for storage: {timestamp_utc} (represents {timestamp.strftime('%Y-%m-%d %H:%M:%S')} {device_tz})")
+                    timestamp = timestamp_utc
 
                     # Determine attendance type
                     # Punch: 0 = Check-in, 1 = Check-out (may vary by device model)
