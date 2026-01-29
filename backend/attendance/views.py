@@ -933,9 +933,12 @@ def iclock_cdata(request):
 
     elif request.method == "POST":
         # POST request - attendance data push
+        print(f"📥 POST request received from device {serial_number}")
+        print(f"   Table: {table}, OpStamp: {op_stamp}")
         try:
             # Get raw request body
             body = request.body.decode("utf-8") if request.body else ""
+            print(f"   Request body length: {len(body)} characters")
 
             # Parse XML data if present
             attendance_records = []
@@ -984,6 +987,7 @@ def iclock_cdata(request):
                                     "punch": punch,
                                 }
                             )
+                            print(f"   ✓ Parsed record: user_id={user_id}, timestamp={timestamp_str}, punch={punch}")
 
                     # Format 2: Direct <PIN>, <DateTime>, <Status> elements at root level
                     if not attendance_records:
@@ -992,15 +996,17 @@ def iclock_cdata(request):
                         status_elem = root.find("Status") or root.find("status")
 
                         if pin_elem is not None and datetime_elem is not None:
+                            user_id = pin_elem.text
+                            timestamp_str = datetime_elem.text
+                            punch = status_elem.text if status_elem is not None else "0"
                             attendance_records.append(
                                 {
-                                    "user_id": pin_elem.text,
-                                    "timestamp_str": datetime_elem.text,
-                                    "punch": status_elem.text
-                                    if status_elem is not None
-                                    else "0",
+                                    "user_id": user_id,
+                                    "timestamp_str": timestamp_str,
+                                    "punch": punch,
                                 }
                             )
+                            print(f"   ✓ Parsed record (format 2): user_id={user_id}, timestamp={timestamp_str}, punch={punch}")
 
                 except ET.ParseError as e:
                     # If not XML, try to parse as plain text or other format
@@ -1011,16 +1017,19 @@ def iclock_cdata(request):
                     print(f"Body content: {body[:500]}")
 
             # If no records found in XML, try to parse from query parameters or body
-            if not attendance_records and table == "0PERL0G":
-                # 0PERL0G typically means attendance log table
-                # The data might be in the body in a different format
-                # For now, we'll log it and return OK
-                print(
-                    f"Received attendance data from device {serial_number}, table: {table}, OpStamp: {op_stamp}"
-                )
-                print(f"Body content: {body[:500] if body else 'Empty'}")
+            if not attendance_records:
+                print(f"⚠ No attendance records parsed from XML for device {serial_number}")
+                print(f"   Table: {table}, OpStamp: {op_stamp}")
+                print(f"   Body length: {len(body) if body else 0} characters")
+                print(f"   Body content (first 500 chars): {body[:500] if body else 'Empty'}")
+                
+                if table == "0PERL0G":
+                    # 0PERL0G typically means attendance log table
+                    # The data might be in the body in a different format
+                    print(f"   Note: Table is 0PERL0G (attendance log), but no records were parsed")
 
             # Process attendance records
+            print(f"📊 Processing {len(attendance_records)} attendance record(s) from device {serial_number}")
             processed_count = 0
             errors = []
 
@@ -1097,21 +1106,41 @@ def iclock_cdata(request):
 
                     if not existing:
                         # Create attendance record
+                        print(f"📝 Creating attendance record for student {student.full_name} ({student.student_id})")
                         attendance = Attendance.create_attendance(
                             student=student,
                             attendance_type=attendance_type,
                             timestamp=timestamp,
                             device=device,
                         )
+                        print(f"✓ Attendance record created: ID {attendance.id}")
 
                         # Send notifications
+                        print(f"📱 Attempting to send SMS notification for attendance ID {attendance.id}...")
                         try:
                             sms_service = SMSNotificationService()
-                            sms_service.send_attendance_notification(attendance)
+                            sms_result = sms_service.send_attendance_notification(attendance)
+                            
+                            # Log SMS notification result
+                            print(f"📱 SMS notification result: {sms_result}")
+                            if sms_result.get('success'):
+                                print(f"✓ SMS notifications sent: {sms_result.get('sent', 0)} sent, {sms_result.get('failed', 0)} failed")
+                            else:
+                                print(f"⚠ SMS notification failed: {sms_result.get('errors', ['Unknown error'])}")
+                                if sms_result.get('errors'):
+                                    errors.extend([f"SMS: {err}" for err in sms_result.get('errors', [])])
+                            
+                            # Log how many SMS log entries were created
+                            logs_created = sms_result.get('logs', [])
+                            print(f"📋 SMS log entries created: {len(logs_created)}")
                         except Exception as e:
-                            print(f"Error sending SMS notification: {str(e)}")
+                            error_msg = f"Error sending SMS notification: {str(e)}"
+                            print(f"✗ {error_msg}\nTraceback: {traceback.format_exc()}")
+                            errors.append(error_msg)
 
                         processed_count += 1
+                    else:
+                        print(f"⏭ Skipping duplicate attendance record for student {student.full_name}")
 
                 except Exception as e:
                     error_msg = f"Error processing record: {str(e)}"

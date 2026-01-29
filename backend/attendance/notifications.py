@@ -431,26 +431,18 @@ class SMSNotificationService:
     
     def send_attendance_notification(self, attendance: Attendance) -> Dict:
         """Send attendance SMS notification to all parents of a student and log results"""
-        if not self.enabled:
-            print("⚠ SMS notifications are disabled (SMS_ENABLED=False)")
-            return {'success': False, 'sent': 0, 'failed': 0, 'errors': ['SMS notifications are disabled']}
-        
-        if not all([self.api_key, self.username, self.sender_name]):
-            print(f"⚠ SMS credentials missing")
-            return {'success': False, 'sent': 0, 'failed': 0, 'errors': ['SMS API credentials not configured']}
+        print(f"🔔 SMSNotificationService.send_attendance_notification called for attendance ID {attendance.id}")
+        print(f"   Student: {attendance.student.full_name}")
+        print(f"   SMS Enabled: {self.enabled}")
+        print(f"   Has API Key: {bool(self.api_key)}")
+        print(f"   Has Username: {bool(self.username)}")
+        print(f"   Has Sender Name: {bool(self.sender_name)}")
         
         student = attendance.student
         parents = student.parents.all()
+        print(f"   Parents found: {parents.count()}")
         
-        if not parents.exists():
-            print(f"⚠ No parents found for student {student.full_name}")
-            return {
-                'success': False,
-                'sent': 0,
-                'failed': 0,
-                'errors': [f'No parents found for student {student.full_name}']
-            }
-        
+        # Always create log entries for audit purposes, even if SMS is disabled
         results = {
             'success': True,
             'sent': 0,
@@ -458,6 +450,62 @@ class SMSNotificationService:
             'errors': [],
             'logs': []
         }
+        
+        if not self.enabled:
+            print("⚠ SMS notifications are disabled (SMS_ENABLED=False) - creating log entries only")
+            # Create log entries for each parent indicating SMS is disabled
+            for parent in parents:
+                message = self._format_attendance_message(student, attendance, parent)
+                sms_log = SMSLog.objects.create(
+                    student=student,
+                    parent=parent,
+                    attendance=attendance,
+                    phone_number=parent.phone_number or '',
+                    message=message,
+                    status='FAILED',
+                    error_message='SMS notifications are disabled'
+                )
+                results['logs'].append(sms_log.id)
+                results['failed'] += 1
+            results['success'] = False
+            results['errors'].append('SMS notifications are disabled')
+            return results
+        
+        if not all([self.api_key, self.username, self.sender_name]):
+            missing = []
+            if not self.api_key:
+                missing.append('SMS_API_KEY')
+            if not self.username:
+                missing.append('SMS_USERNAME')
+            if not self.sender_name:
+                missing.append('SMS_SENDER_NAME')
+            error_msg = f'SMS API credentials not configured. Missing: {", ".join(missing)}'
+            print(f"⚠ {error_msg}")
+            # Create log entries for each parent indicating credentials are missing
+            for parent in parents:
+                message = self._format_attendance_message(student, attendance, parent)
+                sms_log = SMSLog.objects.create(
+                    student=student,
+                    parent=parent,
+                    attendance=attendance,
+                    phone_number=parent.phone_number or '',
+                    message=message,
+                    status='FAILED',
+                    error_message=error_msg
+                )
+                results['logs'].append(sms_log.id)
+                results['failed'] += 1
+            results['success'] = False
+            results['errors'].append(error_msg)
+            return results
+        
+        if not parents.exists():
+            error_msg = f'No parents found for student {student.full_name}'
+            print(f"⚠ {error_msg}")
+            # No log entry created when no parents exist (parent field is required)
+            results['success'] = False
+            results['errors'].append(error_msg)
+            return results
         
         for parent in parents:
             # Format personalized message for this parent
