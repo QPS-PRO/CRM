@@ -1153,22 +1153,47 @@ def iclock_cdata(request):
                                     f"Could not parse timestamp: {timestamp_str}, using current time"
                                 )
                     
+                    # Convert to timezone-aware datetime
+                    # IMPORTANT: The device sends UTC time (e.g., "2026-01-30 03:01:21" UTC)
+                    # but the device's actual local time is different (e.g., "2026-01-29 22:01:21")
+                    # 
+                    # The device's timestamp doesn't match its actual local time, so we should
+                    # use the server's current time instead, which matches the device's actual local time.
+                    # 
+                    # However, we want to preserve the exact time from the device's perspective.
+                    # The solution: Use the server's current time (which matches device local time)
+                    # but we'll still parse the device timestamp for reference.
+                    
                     device_tz = get_device_timezone()
                     
+                    # Calculate the time difference between what device sends and server time
+                    # This helps us understand the offset
+                    server_now = timezone.now()
+                    server_now_local = server_now.astimezone(device_tz)
+                    
                     if timezone.is_naive(timestamp):
-                        timestamp_as_utc = pytz.UTC.localize(timestamp)
-                        timestamp_in_device_tz = timestamp_as_utc.astimezone(device_tz)
-                        timestamp = timestamp_in_device_tz
+                        # Parse device timestamp as if it's in device timezone
+                        device_timestamp_local = device_tz.localize(timestamp)
+                        print(f"   📅 Device sent timestamp: {timestamp_str}")
+                        print(f"   🕐 Parsed as device local: {device_timestamp_local} ({device_tz})")
+                        print(f"   🖥️  Server current time: {server_now_local} ({device_tz})")
                         
-                        print(f"   📅 Device sent: {timestamp_str}")
-                        print(f"   🌍 Interpreted as UTC: {timestamp_as_utc}")
-                        print(f"   🕐 Converted to device timezone: {timestamp} ({device_tz})")
+                        # Calculate time difference
+                        time_diff = (server_now_local - device_timestamp_local).total_seconds()
+                        print(f"   ⏱️  Time difference: {time_diff/3600:.1f} hours")
+                        
+                        # Use server time (which matches device's actual local time)
+                        # This ensures the saved time matches when the SMS was sent
+                        timestamp = server_now_local
+                        print(f"   ✅ Using server time (device local): {timestamp} ({device_tz})")
                     else:
+                        # If already timezone-aware, convert to device timezone
                         if timestamp.tzinfo == pytz.UTC:
                             timestamp = timestamp.astimezone(device_tz)
                         else:
                             timestamp = timestamp.astimezone(device_tz)
                     
+                    # Convert to UTC for storage (Django stores all datetimes in UTC)
                     timestamp_utc = timestamp.astimezone(pytz.UTC)
                     print(f"   💾 Final UTC for storage: {timestamp_utc} (represents {timestamp.strftime('%Y-%m-%d %H:%M:%S')} {device_tz})")
                     timestamp = timestamp_utc
