@@ -1015,18 +1015,87 @@ def iclock_cdata(request):
                         f"Could not parse XML data from device {serial_number}: {str(e)}"
                     )
                     print(f"Body content: {body[:500]}")
+                    # Will try plain text parsing below
 
-            # If no records found in XML, try to parse from query parameters or body
-            if not attendance_records:
-                print(f"⚠ No attendance records parsed from XML for device {serial_number}")
+            # If no records found in XML, try to parse as plain text
+            # ZKTeco devices sometimes send data as: "PIN TIMESTAMP" or "PIN TIMESTAMP PUNCH"
+            # Example: "1 2026-01-30 03:01:18" or "1 2026-01-30 03:01:18 0"
+            if not attendance_records and body:
+                print(f"⚠ No attendance records parsed from XML, trying plain text format...")
                 print(f"   Table: {table}, OpStamp: {op_stamp}")
-                print(f"   Body length: {len(body) if body else 0} characters")
-                print(f"   Body content (first 500 chars): {body[:500] if body else 'Empty'}")
+                print(f"   Body content: {body[:500] if body else 'Empty'}")
                 
-                if table == "0PERL0G":
-                    # 0PERL0G typically means attendance log table
-                    # The data might be in the body in a different format
-                    print(f"   Note: Table is 0PERL0G (attendance log), but no records were parsed")
+                # Try parsing plain text format
+                # Format: "PIN TIMESTAMP" or "PIN TIMESTAMP PUNCH"
+                # Lines are separated by newlines
+                lines = body.strip().split('\n')
+                print(f"   Found {len(lines)} line(s) in body")
+                
+                for line_num, line in enumerate(lines, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # Split by whitespace
+                    parts = line.split()
+                    print(f"   Line {line_num}: {line} -> {len(parts)} parts")
+                    
+                    if len(parts) >= 2:
+                        # At minimum: PIN and TIMESTAMP
+                        user_id = parts[0]
+                        
+                        # Determine timestamp and punch
+                        # Format examples:
+                        # "1 2026-01-30 03:01:18" -> 3 parts: PIN, DATE, TIME
+                        # "1 2026-01-30 03:01:18 0" -> 4 parts: PIN, DATE, TIME, PUNCH
+                        # "1 2026-01-30T03:01:18" -> 2 parts: PIN, DATETIME
+                        
+                        if len(parts) >= 3:
+                            # Date and time are separate: "2026-01-30 03:01:18"
+                            # Check if parts[1] looks like a date (YYYY-MM-DD or YYYY/MM/DD)
+                            if (len(parts[1]) == 10 and ('-' in parts[1] or '/' in parts[1])) and ':' in parts[2]:
+                                # Date and time are separate
+                                timestamp_str = f"{parts[1]} {parts[2]}"
+                                punch = parts[3] if len(parts) > 3 else "0"
+                            else:
+                                # Try combining parts[1] and parts[2] as timestamp
+                                timestamp_str = f"{parts[1]} {parts[2]}"
+                                punch = parts[3] if len(parts) > 3 else "0"
+                        elif len(parts) == 2:
+                            # Only 2 parts: PIN and full timestamp
+                            timestamp_str = parts[1]
+                            punch = "0"
+                        else:
+                            print(f"   ✗ Unexpected number of parts: {len(parts)}")
+                            continue
+                        
+                        # Validate and parse timestamp format
+                        timestamp_valid = False
+                        for fmt in ["%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"]:
+                            try:
+                                datetime.strptime(timestamp_str, fmt)
+                                timestamp_valid = True
+                                break
+                            except ValueError:
+                                continue
+                        
+                        if timestamp_valid:
+                            attendance_records.append({
+                                "user_id": user_id,
+                                "timestamp_str": timestamp_str,
+                                "punch": punch,
+                            })
+                            print(f"   ✓ Parsed plain text record: user_id={user_id}, timestamp={timestamp_str}, punch={punch}")
+                        else:
+                            print(f"   ✗ Could not parse timestamp format: {timestamp_str} (tried multiple formats)")
+                    else:
+                        print(f"   ✗ Line {line_num} has insufficient parts: {line}")
+                
+                if not attendance_records:
+                    print(f"   ⚠ Still no attendance records parsed after trying plain text format")
+                    if table == "ATTLOG" or table == "0PERL0G":
+                        # ATTLOG typically means attendance log table
+                        print(f"   Note: Table is {table} (attendance log), but no records were parsed")
 
             # Process attendance records
             print(f"📊 Processing {len(attendance_records)} attendance record(s) from device {serial_number}")
