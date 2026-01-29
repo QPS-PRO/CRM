@@ -353,10 +353,6 @@ function SMSLogs() {
           onSearchChange={setSearchInput}
           onDelete={handleDelete}
           onBulkDelete={handleBulkDelete}
-          page={page - 1}
-          rowsPerPage={15}
-          totalCount={data?.count || 0}
-          onPageChange={(newPage) => setPage(newPage + 1)}
         />
       </Paper>
 

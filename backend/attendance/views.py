@@ -919,8 +919,41 @@ def iclock_cdata(request):
 
     if request.method == "GET":
         # GET request - device handshake/initialization
-        # Return device configuration or acknowledgment
-        response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+        # Check if this is a time sync request (getrequest endpoint)
+        request_path = request.path
+        
+        if 'getrequest' in request_path.lower():
+            # Time sync request - send server's local time to device
+            device_tz = get_device_timezone()
+            server_now = timezone.now()
+            server_local_time = server_now.astimezone(device_tz)
+            
+            # Format time as YYYY-MM-DD HH:MM:SS for ZKTeco devices
+            time_str = server_local_time.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Check for INFO parameter (device sends device info in getrequest)
+            info_param = request.GET.get("INFO", "")
+            if info_param:
+                print(f"📱 Device info: {info_param}")
+            
+            print(f"🕐 Time sync request from device {serial_number}")
+            print(f"   Server UTC time: {server_now}")
+            print(f"   Server local time ({device_tz}): {server_local_time}")
+            print(f"   Sending to device: {time_str}")
+            
+            # ZKTeco devices expect time sync in XML format
+            # Some devices use SetTime, others use GetTime - try SetTime first
+            # Format: <Response><Cmd>SetTime</Cmd><Time>YYYY-MM-DD HH:MM:SS</Time></Response>
+            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+                        <Response>
+                            <Cmd>SetTime</Cmd>
+                            <Status>OK</Status>
+                            <Time>{time_str}</Time>
+                        </Response>"""
+            return HttpResponse(response_xml, content_type="application/xml", status=200)
+        else:
+            # Regular handshake - return device configuration
+            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
                             <Cmd>GetOptions</Cmd>
                             <Status>OK</Status>
@@ -929,7 +962,7 @@ def iclock_cdata(request):
                                 <Language>69</Language>
                             </Options>
                         </Response>"""
-        return HttpResponse(response_xml, content_type="application/xml", status=200)
+            return HttpResponse(response_xml, content_type="application/xml", status=200)
 
     elif request.method == "POST":
         # POST request - attendance data push
