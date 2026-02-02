@@ -928,29 +928,105 @@ def iclock_cdata(request):
             server_now = timezone.now()
             server_local_time = server_now.astimezone(device_tz)
             
-            # Format time as YYYY-MM-DD HH:MM:SS for ZKTeco devices
-            time_str = server_local_time.strftime("%Y-%m-%d %H:%M:%S")
-            
             # Check for INFO parameter (device sends device info in getrequest)
             info_param = request.GET.get("INFO", "")
+            device_model = None
+            device_version = None
+            
             if info_param:
                 print(f"📱 Device info: {info_param}")
+                # Parse device version/model from INFO if available
+                # Format: "Ver X.X.X.X-YYYYMMDD, model, ..."
+                try:
+                    parts = info_param.split(",")
+                    if len(parts) > 0 and "Ver" in parts[0]:
+                        device_version = parts[0].strip()
+                        print(f"   Device version: {device_version}")
+                    if len(parts) > 1:
+                        device_model = parts[1].strip() if parts[1].strip() else None
+                except Exception as e:
+                    print(f"   Could not parse device info: {e}")
             
             print(f"🕐 Time sync request from device {serial_number}")
             print(f"   Server UTC time: {server_now}")
             print(f"   Server local time ({device_tz}): {server_local_time}")
-            print(f"   Sending to device: {time_str}")
             
-            # ZKTeco devices expect time sync in XML format
-            # Some devices use SetTime, others use GetTime - try SetTime first
-            # Format: <Response><Cmd>SetTime</Cmd><Time>YYYY-MM-DD HH:MM:SS</Time></Response>
+            # Prepare multiple time formats - different ZKTeco devices expect different formats
+            time_formats = {
+                'standard': server_local_time.strftime("%Y-%m-%d %H:%M:%S"),  # YYYY-MM-DD HH:MM:SS
+                'iso': server_local_time.strftime("%Y-%m-%dT%H:%M:%S"),  # YYYY-MM-DDTHH:MM:SS
+                'compact': server_local_time.strftime("%Y%m%d%H%M%S"),  # YYYYMMDDHHMMSS
+                'unix': str(int(server_local_time.timestamp())),  # Unix timestamp
+            }
+            
+            print(f"   Time formats prepared:")
+            for fmt_name, fmt_value in time_formats.items():
+                print(f"     {fmt_name}: {fmt_value}")
+            
+            # Check for format parameter (allows trying different formats)
+            format_param = request.GET.get("format", "").lower()
+            cmd_param = request.GET.get("cmd", "").lower()
+            
+            # Determine which format to use
+            use_format = 'standard'  # Default
+            use_cmd = 'GetTime'  # Default command
+            
+            # Allow override via query parameters for testing
+            if format_param in time_formats:
+                use_format = format_param
+                print(f"   Using format from parameter: {use_format}")
+            
+            if cmd_param in ['gettime', 'settime']:
+                use_cmd = cmd_param.capitalize()
+                print(f"   Using command from parameter: {use_cmd}")
+            
+            time_str = time_formats[use_format]
+            
+            # Try different response formats based on device or parameters
+            # Format 1: GetTime/SetTime command with XML (most common for ADMS protocol)
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
-                            <Cmd>SetTime</Cmd>
+                            <Cmd>{use_cmd}</Cmd>
                             <Status>OK</Status>
                             <Time>{time_str}</Time>
                         </Response>"""
-            return HttpResponse(response_xml, content_type="application/xml", status=200)
+            
+            print(f"   📤 Sending: {use_cmd} XML with {use_format} time format")
+            print(f"   Response: {response_xml.strip()}")
+            print(f"")
+            print(f"   ⚠️  TROUBLESHOOTING GUIDE:")
+            print(f"      If device time doesn't sync, try these steps:")
+            print(f"      1. Device Web Interface Configuration:")
+            print(f"         - Access device web interface (usually http://device-ip)")
+            print(f"         - Go to: System -> Time Settings or Communication -> Time Sync")
+            print(f"         - Enable: 'Time Sync', 'Auto Sync Time', or 'Server Time Sync'")
+            print(f"         - Set sync method to: 'HTTP' or 'ADMS' (not NTP)")
+            print(f"         - Set server URL to: http://your-server-ip/iclock/getrequest")
+            print(f"         - Disable NTP if enabled (it conflicts with server sync)")
+            print(f"      2. Device Mode Settings:")
+            print(f"         - Set device to 'Slave Mode' for time synchronization")
+            print(f"         - Some devices need 'Time Server Mode' enabled")
+            print(f"      3. Network Configuration:")
+            print(f"         - Verify device can reach server (ping test)")
+            print(f"         - Check firewall allows port 80/8080")
+            print(f"         - Verify device DNS settings if using hostname")
+            print(f"      4. Alternative Formats (if above doesn't work):")
+            print(f"         - Try: ?format=iso&cmd=settime")
+            print(f"         - Try: ?format=compact&cmd=gettime")
+            print(f"      5. Device Firmware:")
+            print(f"         - Update device firmware if possible")
+            print(f"         - Some older firmware versions have time sync bugs")
+            print(f"")
+            
+            response = HttpResponse(response_xml, content_type="application/xml", status=200)
+            
+            # Add headers that some devices might expect
+            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response['Pragma'] = 'no-cache'
+            response['Expires'] = '0'
+            response['Content-Length'] = str(len(response_xml))
+            
+            return response
         else:
             # Regular handshake - return device configuration
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
