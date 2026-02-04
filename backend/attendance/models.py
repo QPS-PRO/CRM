@@ -278,10 +278,7 @@ class AttendanceSettings(models.Model):
         """
         from django.utils import timezone
         from datetime import datetime, time
-        import logging
         import pytz
-        
-        logger = logging.getLogger(__name__)
         
         settings = AttendanceSettings.get_settings()
         
@@ -310,18 +307,12 @@ class AttendanceSettings(models.Model):
         lateness_start_time = settings.lateness_start_time
         lateness_end_time = settings.lateness_end_time
         
-        # Compare times directly (more reliable than datetime comparison)
-        # Determine status by comparing time components
+
         if attendance_start_time <= check_in_time <= attendance_end_time:
-            logger.debug(f"ATTENDED: {check_in_time} is between {attendance_start_time} and {attendance_end_time}")
             return 'ATTENDED'
-        elif lateness_start_time < check_in_time <= lateness_end_time:
-            logger.debug(f"LATE: {check_in_time} is between {lateness_start_time} and {lateness_end_time}")
+        elif lateness_start_time <= check_in_time <= lateness_end_time:
             return 'LATE'
         else:
-            logger.debug(f"ABSENT: {check_in_time} is not in any window")
-            logger.debug(f"  Attendance window: {attendance_start_time} - {attendance_end_time}")
-            logger.debug(f"  Lateness window: {lateness_start_time} - {lateness_end_time}")
             return 'ABSENT'
 
 
@@ -359,9 +350,7 @@ def update_periodic_task(sender, instance, **kwargs):
         except PeriodicTask.DoesNotExist:
             # Task doesn't exist yet, will be created on next app startup
             pass
-    except Exception as e:
+    except Exception:
         # Don't fail if Celery Beat tables don't exist
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Could not update periodic task: {e}")
+        pass
 
