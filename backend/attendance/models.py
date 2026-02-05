@@ -268,7 +268,7 @@ class AttendanceSettings(models.Model):
         return settings
 
     @staticmethod
-    def calculate_attendance_status(check_in_datetime):
+        def calculate_attendance_status(check_in_datetime):
         """
         Calculate attendance status based on check-in datetime
         Returns: 'ATTENDED', 'LATE', or 'ABSENT'
@@ -278,10 +278,7 @@ class AttendanceSettings(models.Model):
         """
         from django.utils import timezone
         from datetime import datetime, time
-        import logging
         import pytz
-        
-        logger = logging.getLogger(__name__)
         
         settings = AttendanceSettings.get_settings()
         
@@ -302,7 +299,11 @@ class AttendanceSettings(models.Model):
             check_in_local = check_in_datetime
         
         # Get the time component from check-in datetime (in device's local timezone)
-        check_in_time = check_in_local.time()
+        check_in_time_full = check_in_local.time()
+        
+        # Normalize check-in time to only hours and minutes (ignore seconds/microseconds)
+        # This ensures boundary times like 8:30:00.123 are treated as 8:30:00
+        check_in_time = time(check_in_time_full.hour, check_in_time_full.minute)
         
         # Get time window settings
         attendance_start_time = settings.attendance_start_time
@@ -310,18 +311,19 @@ class AttendanceSettings(models.Model):
         lateness_start_time = settings.lateness_start_time
         lateness_end_time = settings.lateness_end_time
         
-        # Compare times directly (more reliable than datetime comparison)
-        # Determine status by comparing time components
-        if attendance_start_time <= check_in_time <= attendance_end_time:
-            logger.debug(f"ATTENDED: {check_in_time} is between {attendance_start_time} and {attendance_end_time}")
+        # Normalize window times to only hours and minutes for consistent comparison
+        attendance_start = time(attendance_start_time.hour, attendance_start_time.minute)
+        attendance_end = time(attendance_end_time.hour, attendance_end_time.minute)
+        lateness_start = time(lateness_start_time.hour, lateness_start_time.minute)
+        lateness_end = time(lateness_end_time.hour, lateness_end_time.minute)
+
+        # Check if check-in time falls within attendance window (inclusive boundaries)
+        if attendance_start <= check_in_time <= attendance_end:
             return 'ATTENDED'
-        elif lateness_start_time < check_in_time <= lateness_end_time:
-            logger.debug(f"LATE: {check_in_time} is between {lateness_start_time} and {lateness_end_time}")
+        # Check if check-in time falls within lateness window (inclusive boundaries)
+        elif lateness_start <= check_in_time <= lateness_end:
             return 'LATE'
         else:
-            logger.debug(f"ABSENT: {check_in_time} is not in any window")
-            logger.debug(f"  Attendance window: {attendance_start_time} - {attendance_end_time}")
-            logger.debug(f"  Lateness window: {lateness_start_time} - {lateness_end_time}")
             return 'ABSENT'
 
 
