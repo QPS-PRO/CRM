@@ -268,7 +268,7 @@ class AttendanceSettings(models.Model):
         return settings
 
     @staticmethod
-        def calculate_attendance_status(check_in_datetime):
+    def calculate_attendance_status(check_in_datetime):
         """
         Calculate attendance status based on check-in datetime
         Returns: 'ATTENDED', 'LATE', or 'ABSENT'
@@ -361,9 +361,6 @@ def update_periodic_task(sender, instance, **kwargs):
         except PeriodicTask.DoesNotExist:
             # Task doesn't exist yet, will be created on next app startup
             pass
-    except Exception as e:
+    except Exception:
         # Don't fail if Celery Beat tables don't exist
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Could not update periodic task: {e}")
-
+        pass
