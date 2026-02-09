@@ -895,7 +895,6 @@ def iclock_cdata(request):
 
     Expected URL format: /iclock/cdata?SN=<serial_number>&table=<table_name>&OpStamp=<timestamp>
     """
-    # Get device serial number from query parameters
     serial_number = request.GET.get("SN", "").strip()
     table = request.GET.get("table", "").strip()
     op_stamp = request.GET.get("OpStamp", "").strip()
@@ -903,87 +902,56 @@ def iclock_cdata(request):
     if not serial_number:
         return HttpResponse("SN parameter is required", status=400)
 
-    # Try to find the device by serial number
     try:
         device = FingerprintDevice.objects.get(
             serial_number=serial_number, status="ACTIVE"
         )
     except FingerprintDevice.DoesNotExist:
-        # Device not found - return error but don't fail completely
-        # Some devices might send data before being registered
-        print(
-            f"Warning: Device with serial number {serial_number} not found in database"
-        )
-        # Return OK to prevent device from retrying indefinitely
         return HttpResponse("OK", status=200)
 
     if request.method == "GET":
-        # GET request - device handshake/initialization
-        # Check if this is a time sync request (getrequest endpoint)
         request_path = request.path
         
         if 'getrequest' in request_path.lower():
-            # Time sync request - send server's local time to device
             device_tz = get_device_timezone()
             server_now = timezone.now()
             server_local_time = server_now.astimezone(device_tz)
             
-            # Check for INFO parameter (device sends device info in getrequest)
             info_param = request.GET.get("INFO", "")
             device_model = None
             device_version = None
             
             if info_param:
-                print(f"📱 Device info: {info_param}")
-                # Parse device version/model from INFO if available
-                # Format: "Ver X.X.X.X-YYYYMMDD, model, ..."
                 try:
                     parts = info_param.split(",")
                     if len(parts) > 0 and "Ver" in parts[0]:
                         device_version = parts[0].strip()
-                        print(f"   Device version: {device_version}")
                     if len(parts) > 1:
                         device_model = parts[1].strip() if parts[1].strip() else None
-                except Exception as e:
-                    print(f"   Could not parse device info: {e}")
+                except Exception:
+                    pass
             
-            print(f"🕐 Time sync request from device {serial_number}")
-            print(f"   Server UTC time: {server_now}")
-            print(f"   Server local time ({device_tz}): {server_local_time}")
-            
-            # Prepare multiple time formats - different ZKTeco devices expect different formats
             time_formats = {
-                'standard': server_local_time.strftime("%Y-%m-%d %H:%M:%S"),  # YYYY-MM-DD HH:MM:SS
-                'iso': server_local_time.strftime("%Y-%m-%dT%H:%M:%S"),  # YYYY-MM-DDTHH:MM:SS
-                'compact': server_local_time.strftime("%Y%m%d%H%M%S"),  # YYYYMMDDHHMMSS
-                'unix': str(int(server_local_time.timestamp())),  # Unix timestamp
+                'standard': server_local_time.strftime("%Y-%m-%d %H:%M:%S"),
+                'iso': server_local_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                'compact': server_local_time.strftime("%Y%m%d%H%M%S"),
+                'unix': str(int(server_local_time.timestamp())),
             }
             
-            print(f"   Time formats prepared:")
-            for fmt_name, fmt_value in time_formats.items():
-                print(f"     {fmt_name}: {fmt_value}")
-            
-            # Check for format parameter (allows trying different formats)
             format_param = request.GET.get("format", "").lower()
             cmd_param = request.GET.get("cmd", "").lower()
             
-            # Determine which format to use
-            use_format = 'standard'  # Default
-            use_cmd = 'GetTime'  # Default command
+            use_format = 'standard'
+            use_cmd = 'GetTime'
             
-            # Allow override via query parameters for testing
             if format_param in time_formats:
                 use_format = format_param
-                print(f"   Using format from parameter: {use_format}")
             
             if cmd_param in ['gettime', 'settime']:
                 use_cmd = cmd_param.capitalize()
-                print(f"   Using command from parameter: {use_cmd}")
             
             time_str = time_formats[use_format]
             
-            # Try different response formats based on device or parameters
-            # Format 1: GetTime/SetTime command with XML (most common for ADMS protocol)
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
                             <Cmd>{use_cmd}</Cmd>
@@ -991,36 +959,8 @@ def iclock_cdata(request):
                             <Time>{time_str}</Time>
                         </Response>"""
             
-            print(f"   📤 Sending: {use_cmd} XML with {use_format} time format")
-            print(f"   Response: {response_xml.strip()}")
-            print(f"")
-            print(f"   ⚠️  TROUBLESHOOTING GUIDE:")
-            print(f"      If device time doesn't sync, try these steps:")
-            print(f"      1. Device Web Interface Configuration:")
-            print(f"         - Access device web interface (usually http://device-ip)")
-            print(f"         - Go to: System -> Time Settings or Communication -> Time Sync")
-            print(f"         - Enable: 'Time Sync', 'Auto Sync Time', or 'Server Time Sync'")
-            print(f"         - Set sync method to: 'HTTP' or 'ADMS' (not NTP)")
-            print(f"         - Set server URL to: http://your-server-ip/iclock/getrequest")
-            print(f"         - Disable NTP if enabled (it conflicts with server sync)")
-            print(f"      2. Device Mode Settings:")
-            print(f"         - Set device to 'Slave Mode' for time synchronization")
-            print(f"         - Some devices need 'Time Server Mode' enabled")
-            print(f"      3. Network Configuration:")
-            print(f"         - Verify device can reach server (ping test)")
-            print(f"         - Check firewall allows port 80/8080")
-            print(f"         - Verify device DNS settings if using hostname")
-            print(f"      4. Alternative Formats (if above doesn't work):")
-            print(f"         - Try: ?format=iso&cmd=settime")
-            print(f"         - Try: ?format=compact&cmd=gettime")
-            print(f"      5. Device Firmware:")
-            print(f"         - Update device firmware if possible")
-            print(f"         - Some older firmware versions have time sync bugs")
-            print(f"")
-            
             response = HttpResponse(response_xml, content_type="application/xml", status=200)
             
-            # Add headers that some devices might expect
             response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
@@ -1028,7 +968,6 @@ def iclock_cdata(request):
             
             return response
         else:
-            # Regular handshake - return device configuration
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
                             <Cmd>GetOptions</Cmd>
@@ -1041,27 +980,18 @@ def iclock_cdata(request):
             return HttpResponse(response_xml, content_type="application/xml", status=200)
 
     elif request.method == "POST":
-        # POST request - attendance data push
-        print(f"📥 POST request received from device {serial_number}")
-        print(f"   Table: {table}, OpStamp: {op_stamp}")
         try:
-            # Get raw request body
             body = request.body.decode("utf-8") if request.body else ""
-            print(f"   Request body length: {len(body)} characters")
 
-            # Parse XML data if present
             attendance_records = []
             if body:
                 try:
                     root = ET.fromstring(body)
-                    # ZKTeco devices send data in various formats
-                    # Format 1: <Record> elements with PIN, DateTime, Status
                     for record in root.findall(".//Record"):
                         user_id = None
                         timestamp_str = None
                         punch = "0"
 
-                        # Try different element names that ZKTeco devices use
                         pin_elem = (
                             record.find("PIN")
                             or record.find("pin")
@@ -1096,9 +1026,7 @@ def iclock_cdata(request):
                                     "punch": punch,
                                 }
                             )
-                            print(f"   ✓ Parsed record: user_id={user_id}, timestamp={timestamp_str}, punch={punch}")
 
-                    # Format 2: Direct <PIN>, <DateTime>, <Status> elements at root level
                     if not attendance_records:
                         pin_elem = root.find("PIN") or root.find("pin")
                         datetime_elem = root.find("DateTime") or root.find("datetime")
@@ -1115,70 +1043,36 @@ def iclock_cdata(request):
                                     "punch": punch,
                                 }
                             )
-                            print(f"   ✓ Parsed record (format 2): user_id={user_id}, timestamp={timestamp_str}, punch={punch}")
 
-                except ET.ParseError as e:
-                    # If not XML, try to parse as plain text or other format
-                    # Some devices send data in different formats
-                    print(
-                        f"Could not parse XML data from device {serial_number}: {str(e)}"
-                    )
-                    print(f"Body content: {body[:500]}")
-                    # Will try plain text parsing below
+                except ET.ParseError:
+                    pass
 
-            # If no records found in XML, try to parse as plain text
-            # ZKTeco devices sometimes send data as: "PIN TIMESTAMP" or "PIN TIMESTAMP PUNCH"
-            # Example: "1 2026-01-30 03:01:18" or "1 2026-01-30 03:01:18 0"
             if not attendance_records and body:
-                print(f"⚠ No attendance records parsed from XML, trying plain text format...")
-                print(f"   Table: {table}, OpStamp: {op_stamp}")
-                print(f"   Body content: {body[:500] if body else 'Empty'}")
-                
-                # Try parsing plain text format
-                # Format: "PIN TIMESTAMP" or "PIN TIMESTAMP PUNCH"
-                # Lines are separated by newlines
                 lines = body.strip().split('\n')
-                print(f"   Found {len(lines)} line(s) in body")
                 
-                for line_num, line in enumerate(lines, 1):
+                for line in lines:
                     line = line.strip()
                     if not line:
                         continue
                     
-                    # Split by whitespace
                     parts = line.split()
-                    print(f"   Line {line_num}: {line} -> {len(parts)} parts")
                     
                     if len(parts) >= 2:
-                        # At minimum: PIN and TIMESTAMP
                         user_id = parts[0]
                         
-                        # Determine timestamp and punch
-                        # Format examples:
-                        # "1 2026-01-30 03:01:18" -> 3 parts: PIN, DATE, TIME
-                        # "1 2026-01-30 03:01:18 0" -> 4 parts: PIN, DATE, TIME, PUNCH
-                        # "1 2026-01-30T03:01:18" -> 2 parts: PIN, DATETIME
-                        
                         if len(parts) >= 3:
-                            # Date and time are separate: "2026-01-30 03:01:18"
-                            # Check if parts[1] looks like a date (YYYY-MM-DD or YYYY/MM/DD)
                             if (len(parts[1]) == 10 and ('-' in parts[1] or '/' in parts[1])) and ':' in parts[2]:
-                                # Date and time are separate
                                 timestamp_str = f"{parts[1]} {parts[2]}"
                                 punch = parts[3] if len(parts) > 3 else "0"
                             else:
-                                # Try combining parts[1] and parts[2] as timestamp
                                 timestamp_str = f"{parts[1]} {parts[2]}"
                                 punch = parts[3] if len(parts) > 3 else "0"
                         elif len(parts) == 2:
-                            # Only 2 parts: PIN and full timestamp
                             timestamp_str = parts[1]
                             punch = "0"
                         else:
-                            print(f"   ✗ Unexpected number of parts: {len(parts)}")
                             continue
                         
-                        # Validate and parse timestamp format
                         timestamp_valid = False
                         for fmt in ["%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"]:
                             try:
@@ -1194,20 +1088,7 @@ def iclock_cdata(request):
                                 "timestamp_str": timestamp_str,
                                 "punch": punch,
                             })
-                            print(f"   ✓ Parsed plain text record: user_id={user_id}, timestamp={timestamp_str}, punch={punch}")
-                        else:
-                            print(f"   ✗ Could not parse timestamp format: {timestamp_str} (tried multiple formats)")
-                    else:
-                        print(f"   ✗ Line {line_num} has insufficient parts: {line}")
-                
-                if not attendance_records:
-                    print(f"   ⚠ Still no attendance records parsed after trying plain text format")
-                    if table == "ATTLOG" or table == "0PERL0G":
-                        # ATTLOG typically means attendance log table
-                        print(f"   Note: Table is {table} (attendance log), but no records were parsed")
 
-            # Process attendance records
-            print(f"📊 Processing {len(attendance_records)} attendance record(s) from device {serial_number}")
             processed_count = 0
             errors = []
 
@@ -1217,16 +1098,13 @@ def iclock_cdata(request):
                     timestamp_str = record["timestamp_str"]
                     punch = int(record["punch"]) if record["punch"].isdigit() else 0
 
-                    # Find student by user_id (could be student_id or student.id)
                     student = None
                     try:
-                        # Try matching by student_id first
                         student = Student.objects.get(
                             student_id=str(user_id), is_active=True
                         )
                     except Student.DoesNotExist:
                         try:
-                            # Try matching by ID if user_id is numeric
                             user_id_int = int(user_id)
                             student = Student.objects.get(
                                 id=user_id_int, is_active=True
@@ -1238,10 +1116,7 @@ def iclock_cdata(request):
                         errors.append(f"Student not found for user_id: {user_id}")
                         continue
 
-                    # Parse timestamp
-                    # ZKTeco devices typically send timestamp in format: YYYY-MM-DD HH:MM:SS
                     try:
-                        # Try common ZKTeco timestamp formats
                         timestamp = datetime.strptime(
                             timestamp_str, "%Y-%m-%d %H:%M:%S"
                         )
@@ -1256,62 +1131,18 @@ def iclock_cdata(request):
                                     timestamp_str, "%Y-%m-%dT%H:%M:%S"
                                 )
                             except ValueError:
-                                # Fallback to current time if parsing fails
                                 timestamp = timezone.now()
                                 errors.append(
                                     f"Could not parse timestamp: {timestamp_str}, using current time"
                                 )
                     
-                    # Convert to timezone-aware datetime
-                    # IMPORTANT: The device sends UTC time (e.g., "2026-01-30 03:01:21" UTC)
-                    # but the device's actual local time is different (e.g., "2026-01-29 22:01:21")
-                    # 
-                    # The device's timestamp doesn't match its actual local time, so we should
-                    # use the server's current time instead, which matches the device's actual local time.
-                    # 
-                    # However, we want to preserve the exact time from the device's perspective.
-                    # The solution: Use the server's current time (which matches device local time)
-                    # but we'll still parse the device timestamp for reference.
-                    
-                    device_tz = get_device_timezone()
-                    
-                    # Calculate the time difference between what device sends and server time
-                    # This helps us understand the offset
-                    server_now = timezone.now()
-                    server_now_local = server_now.astimezone(device_tz)
-                    
                     if timezone.is_naive(timestamp):
-                        # Parse device timestamp as if it's in device timezone
-                        device_timestamp_local = device_tz.localize(timestamp)
-                        print(f"   📅 Device sent timestamp: {timestamp_str}")
-                        print(f"   🕐 Parsed as device local: {device_timestamp_local} ({device_tz})")
-                        print(f"   🖥️  Server current time: {server_now_local} ({device_tz})")
-                        
-                        # Calculate time difference
-                        time_diff = (server_now_local - device_timestamp_local).total_seconds()
-                        print(f"   ⏱️  Time difference: {time_diff/3600:.1f} hours")
-                        
-                        # Use server time (which matches device's actual local time)
-                        # This ensures the saved time matches when the SMS was sent
-                        timestamp = server_now_local
-                        print(f"   ✅ Using server time (device local): {timestamp} ({device_tz})")
+                        timestamp = pytz.UTC.localize(timestamp)
                     else:
-                        # If already timezone-aware, convert to device timezone
-                        if timestamp.tzinfo == pytz.UTC:
-                            timestamp = timestamp.astimezone(device_tz)
-                        else:
-                            timestamp = timestamp.astimezone(device_tz)
-                    
-                    # Convert to UTC for storage (Django stores all datetimes in UTC)
-                    timestamp_utc = timestamp.astimezone(pytz.UTC)
-                    print(f"   💾 Final UTC for storage: {timestamp_utc} (represents {timestamp.strftime('%Y-%m-%d %H:%M:%S')} {device_tz})")
-                    timestamp = timestamp_utc
+                        timestamp = timestamp.astimezone(pytz.UTC)
 
-                    # Determine attendance type
-                    # Punch: 0 = Check-in, 1 = Check-out (may vary by device model)
-                    attendance_type = "CHECK_IN" if punch == 0 else "CHECK_OUT"
+                    attendance_type = "CHECK_IN"
 
-                    # Check if record already exists (within 1 minute tolerance)
                     time_tolerance = timedelta(minutes=1)
                     existing = Attendance.objects.filter(
                         student=student,
@@ -1321,55 +1152,31 @@ def iclock_cdata(request):
                     ).first()
 
                     if not existing:
-                        # Create attendance record
-                        print(f"📝 Creating attendance record for student {student.full_name} ({student.student_id})")
                         attendance = Attendance.create_attendance(
                             student=student,
                             attendance_type=attendance_type,
                             timestamp=timestamp,
                             device=device,
                         )
-                        print(f"✓ Attendance record created: ID {attendance.id}")
 
-                        # Send notifications
-                        print(f"📱 Attempting to send SMS notification for attendance ID {attendance.id}...")
                         try:
                             sms_service = SMSNotificationService()
                             sms_result = sms_service.send_attendance_notification(attendance)
                             
-                            # Log SMS notification result
-                            print(f"📱 SMS notification result: {sms_result}")
-                            if sms_result.get('success'):
-                                print(f"✓ SMS notifications sent: {sms_result.get('sent', 0)} sent, {sms_result.get('failed', 0)} failed")
-                            else:
-                                print(f"⚠ SMS notification failed: {sms_result.get('errors', ['Unknown error'])}")
-                                if sms_result.get('errors'):
-                                    errors.extend([f"SMS: {err}" for err in sms_result.get('errors', [])])
-                            
-                            # Log how many SMS log entries were created
-                            logs_created = sms_result.get('logs', [])
-                            print(f"📋 SMS log entries created: {len(logs_created)}")
+                            if not sms_result.get('success') and sms_result.get('errors'):
+                                errors.extend([f"SMS: {err}" for err in sms_result.get('errors', [])])
                         except Exception as e:
-                            error_msg = f"Error sending SMS notification: {str(e)}"
-                            print(f"✗ {error_msg}\nTraceback: {traceback.format_exc()}")
-                            errors.append(error_msg)
+                            errors.append(f"Error sending SMS notification: {str(e)}")
 
                         processed_count += 1
-                    else:
-                        print(f"⏭ Skipping duplicate attendance record for student {student.full_name}")
 
                 except Exception as e:
-                    error_msg = f"Error processing record: {str(e)}"
-                    errors.append(error_msg)
-                    print(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+                    errors.append(f"Error processing record: {str(e)}")
                     continue
 
-            # Update device last sync time
             device.last_sync = timezone.now()
             device.save(update_fields=["last_sync"])
 
-            # Return response in ZKTeco expected format
-            # ZKTeco devices expect XML response with status
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                             <Response>
                                 <Cmd>Data</Cmd>
@@ -1384,9 +1191,7 @@ def iclock_cdata(request):
 
         except Exception as e:
             error_msg = f"Error processing attendance data from device {serial_number}: {str(e)}"
-            print(f"{error_msg}\nTraceback: {traceback.format_exc()}")
 
-            # Return error response but still acknowledge receipt
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                             <Response>
                                 <Cmd>Data</Cmd>
