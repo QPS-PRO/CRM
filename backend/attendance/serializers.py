@@ -52,12 +52,10 @@ class AttendanceSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         """Recalculate status when serializing CHECK_IN records to ensure it's up-to-date"""
         from django.utils import timezone
-        from .utils import get_device_timezone
         
         representation = super().to_representation(instance)
         
-        # Convert timestamp from UTC to device's local timezone for display
-        # This ensures the frontend receives the correct local time regardless of browser timezone
+        # Use timestamp directly without timezone conversion (same as SMS formatting)
         if instance.timestamp:
             # Ensure timestamp is timezone-aware
             if timezone.is_naive(instance.timestamp):
@@ -65,12 +63,8 @@ class AttendanceSerializer(serializers.ModelSerializer):
             else:
                 timestamp = instance.timestamp
             
-            # Convert to device timezone
-            device_tz = get_device_timezone()
-            local_timestamp = timestamp.astimezone(device_tz)
-            
-            # Return ISO format string in device timezone (frontend will parse this correctly)
-            representation['timestamp'] = local_timestamp.isoformat()
+            # Return ISO format string directly (no timezone conversion)
+            representation['timestamp'] = timestamp.isoformat()
         
         # Always recalculate status for CHECK_IN records to ensure it's correct
         if instance.attendance_type == 'CHECK_IN':
@@ -103,6 +97,16 @@ class AttendanceSerializer(serializers.ModelSerializer):
         
         if device_id:
             validated_data['device'] = FingerprintDevice.objects.get(id=device_id)
+        
+        # Ensure timestamp is UTC-aware without timezone conversion
+        if 'timestamp' in validated_data:
+            from django.utils import timezone
+            import pytz
+            timestamp = validated_data['timestamp']
+            if timezone.is_naive(timestamp):
+                validated_data['timestamp'] = timezone.make_aware(timestamp, pytz.UTC)
+            else:
+                validated_data['timestamp'] = timestamp.astimezone(pytz.UTC)
         
         # Calculate status for CHECK_IN records
         if validated_data.get('attendance_type') == 'CHECK_IN' and 'timestamp' in validated_data:

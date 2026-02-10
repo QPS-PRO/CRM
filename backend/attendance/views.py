@@ -245,6 +245,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             timestamp = serializer.validated_data["timestamp"]
             device_serial = serializer.validated_data.get("device_serial")
 
+            # Ensure timestamp is UTC-aware without timezone conversion
+            if timezone.is_naive(timestamp):
+                timestamp = timezone.make_aware(timestamp, pytz.UTC)
+            else:
+                timestamp = timestamp.astimezone(pytz.UTC)
+
             try:
                 student = Student.objects.get(id=fingerprint_id, is_active=True)
             except Student.DoesNotExist:
@@ -1137,7 +1143,7 @@ def iclock_cdata(request):
                                 )
                     
                     if timezone.is_naive(timestamp):
-                        timestamp = pytz.UTC.localize(timestamp)
+                        timestamp = timezone.make_aware(timestamp, pytz.UTC)
                     else:
                         timestamp = timestamp.astimezone(pytz.UTC)
 
