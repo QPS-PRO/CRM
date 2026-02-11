@@ -273,45 +273,21 @@ class AttendanceSettings(models.Model):
         Calculate attendance status based on check-in datetime
         Returns: 'ATTENDED', 'LATE', or 'ABSENT'
         
-        Note: The timestamp is stored in UTC, but we compare it in the device's local timezone
-        (same timezone used in services.py when syncing from device)
+        Note: Uses the timestamp as stored in the database without timezone conversion.
+        The time component is extracted directly and compared with attendance settings.
         """
-        from django.utils import timezone
-        from datetime import datetime, time
-        import pytz
+        from datetime import time
         
         settings = AttendanceSettings.get_settings()
+        check_in_time_full = check_in_datetime.time()
         
-        # Ensure timezone-aware datetime
-        if timezone.is_naive(check_in_datetime):
-            check_in_datetime = timezone.make_aware(check_in_datetime)
-        
-        # Convert check_in_datetime from UTC to device's local timezone
-        # Use the same timezone utility as in services.py for consistency
-        from .utils import get_device_timezone
-        device_tz = get_device_timezone()
-        
-        # Convert UTC datetime to device's local timezone for comparison
-        if timezone.is_aware(check_in_datetime):
-            # Convert from UTC (or whatever timezone) to device timezone
-            check_in_local = check_in_datetime.astimezone(device_tz)
-        else:
-            check_in_local = check_in_datetime
-        
-        # Get the time component from check-in datetime (in device's local timezone)
-        check_in_time_full = check_in_local.time()
-        
-        # Normalize check-in time to only hours and minutes (ignore seconds/microseconds)
-        # This ensures boundary times like 8:30:00.123 are treated as 8:30:00
         check_in_time = time(check_in_time_full.hour, check_in_time_full.minute)
         
-        # Get time window settings
         attendance_start_time = settings.attendance_start_time
         attendance_end_time = settings.attendance_end_time
         lateness_start_time = settings.lateness_start_time
         lateness_end_time = settings.lateness_end_time
         
-        # Normalize window times to only hours and minutes for consistent comparison
         attendance_start = time(attendance_start_time.hour, attendance_start_time.minute)
         attendance_end = time(attendance_end_time.hour, attendance_end_time.minute)
         lateness_start = time(lateness_start_time.hour, lateness_start_time.minute)
