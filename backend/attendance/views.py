@@ -708,6 +708,28 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 attendance_type="CHECK_OUT"
             ).count()
 
+            # Get timestamps directly, ensuring they're in UTC (raw database value)
+            # This returns the timestamp as stored in the database without timezone conversion
+            first_check_in_timestamp = None
+            if first_check_in:
+                timestamp_utc = first_check_in.timestamp
+                # Ensure it's timezone-aware and in UTC
+                if timezone.is_naive(timestamp_utc):
+                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
+                else:
+                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
+                first_check_in_timestamp = timestamp_utc
+            
+            last_check_out_timestamp = None
+            if last_check_out:
+                timestamp_utc = last_check_out.timestamp
+                # Ensure it's timezone-aware and in UTC
+                if timezone.is_naive(timestamp_utc):
+                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
+                else:
+                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
+                last_check_out_timestamp = timestamp_utc
+
             report_data.append(
                 {
                     "student_id": student.id,
@@ -720,12 +742,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     "has_attended": has_attended,
                     "attendance_status": attendance_status_display,
                     "attendance_status_code": best_status,
-                    "first_check_in": first_check_in.timestamp.isoformat()
-                    if first_check_in
-                    else None,
-                    "last_check_out": last_check_out.timestamp.isoformat()
-                    if last_check_out
-                    else None,
+                    "first_check_in": first_check_in_timestamp,
+                    "last_check_out": last_check_out_timestamp,
                     "check_in_count": check_in_count,
                     "check_out_count": check_out_count,
                     "total_attendance_days": check_in_count,
