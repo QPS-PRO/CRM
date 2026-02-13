@@ -50,27 +50,25 @@ class AttendanceSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
     
     def to_representation(self, instance):
-        """Recalculate status when serializing CHECK_IN records to ensure it's up-to-date"""
+        """Return timestamp as-is without timezone conversion"""
         from django.utils import timezone
-        from .utils import get_device_timezone
         
         representation = super().to_representation(instance)
         
-        # Convert timestamp from UTC to device's local timezone for display
-        # This ensures the frontend receives the correct local time regardless of browser timezone
+        # Return timestamp WITHOUT timezone conversion
+        # Extract just the time components and format as ISO string without timezone offset
         if instance.timestamp:
-            # Ensure timestamp is timezone-aware
-            if timezone.is_naive(instance.timestamp):
-                timestamp = timezone.make_aware(instance.timestamp)
-            else:
-                timestamp = instance.timestamp
+            # Get the timestamp (stored in UTC in database)
+            raw_timestamp = instance.timestamp
             
-            # Convert to device timezone
-            device_tz = get_device_timezone()
-            local_timestamp = timestamp.astimezone(device_tz)
+            # Make sure it's timezone-aware
+            if timezone.is_naive(raw_timestamp):
+                raw_timestamp = timezone.make_aware(raw_timestamp)
             
-            # Return ISO format string in device timezone (frontend will parse this correctly)
-            representation['timestamp'] = local_timestamp.isoformat()
+            # Format as ISO string but strip the timezone info to display raw time
+            # This will show the UTC time components (which is what you want - the device's local time)
+            timestamp_str = raw_timestamp.strftime('%Y-%m-%dT%H:%M:%S')
+            representation['timestamp'] = timestamp_str
         
         # Always recalculate status for CHECK_IN records to ensure it's correct
         if instance.attendance_type == 'CHECK_IN':
@@ -198,4 +196,3 @@ class AttendanceSettingsSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"lateness_start_time": "Lateness start time must be after or equal to attendance end time"})
         
         return data
-
