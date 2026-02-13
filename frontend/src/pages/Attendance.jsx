@@ -103,7 +103,7 @@ function Attendance() {
       dateFrom,
       dateTo,
     ],
-    queryFn: async () => {
+    queryFn: () => {
       const params = {
         page,
         page_size: 15,
@@ -118,18 +118,7 @@ function Attendance() {
       if (selectedDevice) params.device = selectedDevice
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
-      const response = await getAttendanceRecords(params)
-      
-      // Debug: Log attendance records data
-      if (response?.results && response.results.length > 0) {
-        console.log('🔍 [ATTENDANCE LOGS DEBUG] First record:', response.results[0])
-        if (response.results[0].timestamp) {
-          console.log('🔍 [ATTENDANCE LOGS DEBUG] Raw timestamp:', response.results[0].timestamp)
-          console.log('🔍 [ATTENDANCE LOGS DEBUG] Formatted timestamp:', formatTimestampInOriginalTimezone(response.results[0].timestamp, 'dd MMM, yyyy HH:mm'))
-        }
-      }
-      
-      return response
+      return getAttendanceRecords(params)
     },
     enabled: true,
     refetchOnWindowFocus: false,

@@ -708,20 +708,44 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 attendance_type="CHECK_OUT"
             ).count()
 
-            # Get timestamps and format them the same way as AttendanceSerializer
+           # Get timestamps and format them in device timezone
             first_check_in_timestamp = None
             if first_check_in:
-                # Use the serializer to format timestamp the same way as SMS logs
-                attendance_serializer = AttendanceSerializer(first_check_in)
-                serialized_data = attendance_serializer.data
-                first_check_in_timestamp = serialized_data.get('timestamp')
-            
-            last_check_out_timestamp = None
+                # Convert timestamp from UTC to device timezone for display
+                raw_timestamp = first_check_in.timestamp
+                
+                # Ensure timestamp is timezone-aware
+                if timezone.is_naive(raw_timestamp):
+                    raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
+                elif raw_timestamp.tzinfo != pytz.UTC:
+                    # If it's in a different timezone, convert to UTC first
+                    raw_timestamp = raw_timestamp.astimezone(pytz.UTC)
+                
+                # Convert from UTC to device timezone
+                device_tz = get_device_timezone()
+                device_timestamp = raw_timestamp.astimezone(device_tz)
+                
+                # Return ISO format string in device timezone
+                first_check_in_timestamp = device_timestamp.isoformat()
+           
+           last_check_out_timestamp = None
             if last_check_out:
-                # Use the serializer to format timestamp the same way as SMS logs
-                attendance_serializer = AttendanceSerializer(last_check_out)
-                serialized_data = attendance_serializer.data
-                last_check_out_timestamp = serialized_data.get('timestamp')
+                # Convert timestamp from UTC to device timezone for display
+                raw_timestamp = last_check_out.timestamp
+                
+                # Ensure timestamp is timezone-aware
+                if timezone.is_naive(raw_timestamp):
+                    raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
+                elif raw_timestamp.tzinfo != pytz.UTC:
+                    # If it's in a different timezone, convert to UTC first
+                    raw_timestamp = raw_timestamp.astimezone(pytz.UTC)
+                
+                # Convert from UTC to device timezone
+                device_tz = get_device_timezone()
+                device_timestamp = raw_timestamp.astimezone(device_tz)
+                
+                # Return ISO format string in device timezone
+                last_check_out_timestamp = device_timestamp.isoformat()
 
             report_data.append(
                 {
