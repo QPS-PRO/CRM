@@ -708,9 +708,36 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 attendance_type="CHECK_OUT"
             ).count()
 
-            # Get timestamps directly from the database without any timezone conversion
-            first_check_in_timestamp = first_check_in.timestamp if first_check_in else None
-            last_check_out_timestamp = last_check_out.timestamp if last_check_out else None
+            # Get timestamps and format as ISO strings (same as AttendanceSerializer)
+            # Convert from UTC (database) back to device timezone for display
+            from .utils import get_device_timezone
+            device_tz = get_device_timezone()
+            
+            first_check_in_timestamp = None
+            if first_check_in:
+                timestamp = first_check_in.timestamp
+                # Ensure timestamp is timezone-aware
+                if timezone.is_naive(timestamp):
+                    timestamp = timezone.make_aware(timestamp, pytz.UTC)
+                else:
+                    # Convert from UTC to device timezone
+                    if timestamp.tzinfo == pytz.UTC:
+                        timestamp = timestamp.astimezone(device_tz)
+                # Return ISO format string in device timezone
+                first_check_in_timestamp = timestamp.isoformat()
+            
+            last_check_out_timestamp = None
+            if last_check_out:
+                timestamp = last_check_out.timestamp
+                # Ensure timestamp is timezone-aware
+                if timezone.is_naive(timestamp):
+                    timestamp = timezone.make_aware(timestamp, pytz.UTC)
+                else:
+                    # Convert from UTC to device timezone
+                    if timestamp.tzinfo == pytz.UTC:
+                        timestamp = timestamp.astimezone(device_tz)
+                # Return ISO format string in device timezone
+                last_check_out_timestamp = timestamp.isoformat()
 
             report_data.append(
                 {

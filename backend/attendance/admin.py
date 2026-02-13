@@ -12,11 +12,34 @@ class FingerprintDeviceAdmin(admin.ModelAdmin):
 
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
-    list_display = ['student', 'attendance_type', 'timestamp', 'device', 'is_synced', 'created_at']
+    list_display = ['student', 'attendance_type', 'timestamp_display', 'device', 'is_synced', 'created_at']
     search_fields = ['student__first_name', 'student__last_name', 'student__student_id', 'device__name']
     list_filter = ['attendance_type', 'is_synced', 'device', 'timestamp', 'created_at']
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'timestamp_display']
     date_hierarchy = 'timestamp'
+    
+    def timestamp_display(self, obj):
+        """Display timestamp converted from UTC to device timezone"""
+        if obj.timestamp:
+            from django.utils import timezone
+            from .utils import get_device_timezone
+            import pytz
+            
+            timestamp = obj.timestamp
+            # Ensure timestamp is timezone-aware
+            if timezone.is_naive(timestamp):
+                timestamp = timezone.make_aware(timestamp, pytz.UTC)
+            
+            # Convert from UTC to device timezone (to show original local time)
+            device_tz = get_device_timezone()
+            if timestamp.tzinfo == pytz.UTC:
+                timestamp = timestamp.astimezone(device_tz)
+            
+            # Return ISO format string in device timezone
+            return timestamp.isoformat()
+        return '-'
+    timestamp_display.short_description = 'Timestamp'
+    timestamp_display.admin_order_field = 'timestamp'
 
 
 @admin.register(SMSLog)

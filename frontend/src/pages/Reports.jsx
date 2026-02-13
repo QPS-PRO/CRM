@@ -28,6 +28,7 @@ import { getAttendanceReport } from '../api/attendance'
 import { getBranches } from '../api/branches'
 import { getClasses } from '../api/students'
 import { format } from 'date-fns'
+import { formatTimestampInOriginalTimezone } from '../utils/dateFormat'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import html2canvas from 'html2canvas'
@@ -250,7 +251,7 @@ function Reports() {
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.level || '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.class_name || '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${getTranslatedStatus(student.attendance_status)}</td>
-              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.first_check_in ? format(new Date(student.first_check_in), 'dd/MM/yyyy HH:mm') : '-'}</td>
+              <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.first_check_in ? formatTimestampInOriginalTimezone(student.first_check_in, 'dd/MM/yyyy HH:mm') : '-'}</td>
               <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: 'Cairo', 'Tajawal', Arial, sans-serif;">${student.check_in_count}</td>
             </tr>
           `
@@ -379,7 +380,7 @@ function Reports() {
           student.level || '-',
           student.class_name || '-',
           getTranslatedStatus(student.attendance_status),
-          student.first_check_in ? format(new Date(student.first_check_in), 'dd/MM/yyyy HH:mm') : '-',
+          student.first_check_in ? formatTimestampInOriginalTimezone(student.first_check_in, 'dd/MM/yyyy HH:mm') : '-',
           student.check_in_count,
         ])
         
@@ -741,7 +742,7 @@ function Reports() {
                       </TableCell>
                       <TableCell>
                         {student.first_check_in
-                          ? format(new Date(student.first_check_in), 'dd/MM/yyyy HH:mm')
+                          ? formatTimestampInOriginalTimezone(student.first_check_in, 'dd/MM/yyyy HH:mm')
                           : '-'}
                       </TableCell>
                       <TableCell>{student.check_in_count}</TableCell>

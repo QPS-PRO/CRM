@@ -55,15 +55,22 @@ class AttendanceSerializer(serializers.ModelSerializer):
         
         representation = super().to_representation(instance)
         
-        # Use timestamp directly without timezone conversion (same as SMS formatting)
+        # Convert timestamp from UTC (database) back to device timezone for display
         if instance.timestamp:
-            # Ensure timestamp is timezone-aware
-            if timezone.is_naive(instance.timestamp):
-                timestamp = timezone.make_aware(instance.timestamp)
-            else:
-                timestamp = instance.timestamp
+            from .utils import get_device_timezone
+            import pytz
             
-            # Return ISO format string directly (no timezone conversion)
+            timestamp = instance.timestamp
+            # Ensure timestamp is timezone-aware
+            if timezone.is_naive(timestamp):
+                timestamp = timezone.make_aware(timestamp, pytz.UTC)
+            
+            # Convert from UTC to device timezone (to show original local time)
+            device_tz = get_device_timezone()
+            if timestamp.tzinfo == pytz.UTC:
+                timestamp = timestamp.astimezone(device_tz)
+            
+            # Return ISO format string in device timezone
             representation['timestamp'] = timestamp.isoformat()
         
         # Always recalculate status for CHECK_IN records to ensure it's correct
