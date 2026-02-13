@@ -52,18 +52,28 @@ class AttendanceSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         """Recalculate status when serializing CHECK_IN records to ensure it's up-to-date"""
         from django.utils import timezone
+        from .utils import get_device_timezone
+        import pytz
         
         representation = super().to_representation(instance)
         
-        # Use timestamp directly without timezone conversion (same as SMS formatting)
+        # Convert timestamp from UTC to device timezone for display
+        # The frontend's formatTimestampInOriginalTimezone extracts time components directly,
+        # so we need to provide the timestamp in device timezone
         if instance.timestamp:
-            # Ensure timestamp is timezone-aware
+            # Ensure timestamp is timezone-aware (should be UTC from database)
             if timezone.is_naive(instance.timestamp):
-                timestamp = timezone.make_aware(instance.timestamp)
+                timestamp = timezone.make_aware(instance.timestamp, pytz.UTC)
             else:
                 timestamp = instance.timestamp
             
-            # Return ISO format string directly (no timezone conversion)
+            # Convert from UTC to device timezone
+            # This ensures the ISO string contains the correct local time
+            device_tz = get_device_timezone()
+            if timestamp.tzinfo == pytz.UTC:
+                timestamp = timestamp.astimezone(device_tz)
+            
+            # Return ISO format string in device timezone
             representation['timestamp'] = timestamp.isoformat()
         
         # Always recalculate status for CHECK_IN records to ensure it's correct
