@@ -53,31 +53,24 @@ class AttendanceSerializer(serializers.ModelSerializer):
         """Recalculate status when serializing CHECK_IN records to ensure it's up-to-date"""
         from django.utils import timezone
         from .utils import get_device_timezone
-        import pytz
         
         representation = super().to_representation(instance)
         
-        # Convert timestamp from UTC to device timezone for display
-        # The frontend's formatTimestampInOriginalTimezone extracts time components directly,
-        # so we need to provide the timestamp in device timezone
-        # Work directly with instance.timestamp to avoid any conversion from super()
+        # Convert timestamp from UTC to device's local timezone for display
+        # This ensures the frontend receives the correct local time regardless of browser timezone
         if instance.timestamp:
-            # Get the raw timestamp from the instance (stored in UTC in database)
-            raw_timestamp = instance.timestamp
-            
             # Ensure timestamp is timezone-aware
-            if timezone.is_naive(raw_timestamp):
-                raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
-            elif raw_timestamp.tzinfo != pytz.UTC:
-                # If it's in a different timezone, convert to UTC first
-                raw_timestamp = raw_timestamp.astimezone(pytz.UTC)
+            if timezone.is_naive(instance.timestamp):
+                timestamp = timezone.make_aware(instance.timestamp)
+            else:
+                timestamp = instance.timestamp
             
-            # Convert from UTC to device timezone
+            # Convert to device timezone
             device_tz = get_device_timezone()
-            device_timestamp = raw_timestamp.astimezone(device_tz)
+            local_timestamp = timestamp.astimezone(device_tz)
             
-            # Return ISO format string in device timezone
-            representation['timestamp'] = device_timestamp.isoformat()
+            # Return ISO format string in device timezone (frontend will parse this correctly)
+            representation['timestamp'] = local_timestamp.isoformat()
         
         # Always recalculate status for CHECK_IN records to ensure it's correct
         if instance.attendance_type == 'CHECK_IN':
