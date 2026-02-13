@@ -708,28 +708,27 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 attendance_type="CHECK_OUT"
             ).count()
 
-            # Get timestamps and format as ISO strings (same as AttendanceSerializer)
-            # Convert from UTC (database) back to device timezone for display
-            from .utils import get_device_timezone
-            device_tz = get_device_timezone()
-            
-            def convert_timestamp_to_device_tz(dt):
-                """Convert timestamp to device timezone, handling Django's timezone conversion"""
-                if dt is None:
-                    return None
-                # Django with USE_TZ=True returns datetimes in TIME_ZONE
-                # We need to normalize to UTC first, then convert to device timezone
-                if timezone.is_naive(dt):
-                    dt = timezone.make_aware(dt, pytz.UTC)
+            # Get timestamps directly, ensuring they're in UTC (raw database value)
+            # This returns the timestamp as stored in the database without timezone conversion
+            first_check_in_timestamp = None
+            if first_check_in:
+                timestamp_utc = first_check_in.timestamp
+                # Ensure it's timezone-aware and in UTC
+                if timezone.is_naive(timestamp_utc):
+                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
                 else:
-                    # Convert to UTC first (handles any timezone Django might have used)
-                    dt = dt.astimezone(pytz.UTC)
-                # Now convert from UTC to device timezone
-                dt = dt.astimezone(device_tz)
-                return dt.isoformat()
+                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
+                first_check_in_timestamp = timestamp_utc
             
-            first_check_in_timestamp = convert_timestamp_to_device_tz(first_check_in.timestamp if first_check_in else None)
-            last_check_out_timestamp = convert_timestamp_to_device_tz(last_check_out.timestamp if last_check_out else None)
+            last_check_out_timestamp = None
+            if last_check_out:
+                timestamp_utc = last_check_out.timestamp
+                # Ensure it's timezone-aware and in UTC
+                if timezone.is_naive(timestamp_utc):
+                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
+                else:
+                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
+                last_check_out_timestamp = timestamp_utc
 
             report_data.append(
                 {
