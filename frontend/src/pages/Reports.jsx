@@ -110,7 +110,7 @@ function Reports() {
     }
   }
 
-  const { data: reportData, isLoading, refetch } = useQuery({
+  const { data: reportData, isLoading, refetch, error } = useQuery({
     queryKey: ['attendance-report', selectedBranch, selectedGrade, selectedLevel, selectedClass, dateFrom, dateTo],
     queryFn: async () => {
       const params = {}
@@ -120,26 +120,71 @@ function Reports() {
       if (selectedClass) params.class = selectedClass
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
-      const data = await getAttendanceReport(params)
       
-      // Debug: Log report data to console
-      console.log('🔍 [REPORTS DEBUG] Report data received:', data)
-      if (data?.students && data.students.length > 0) {
-        console.log('🔍 [REPORTS DEBUG] First student data:', data.students[0])
-        if (data.students[0].first_check_in) {
-          console.log('🔍 [REPORTS DEBUG] Raw first_check_in timestamp:', data.students[0].first_check_in)
-          console.log('🔍 [REPORTS DEBUG] Formatted first_check_in:', formatTimestampInOriginalTimezone(data.students[0].first_check_in, 'dd/MM/yyyy HH:mm'))
+      console.log('🔍 [REPORTS DEBUG] Fetching report with params:', params)
+      
+      try {
+        const data = await getAttendanceReport(params)
+        
+        // Debug: Log report data to console
+        console.log('🔍 [REPORTS DEBUG] Report data received:', data)
+        if (data?.students && data.students.length > 0) {
+          console.log('🔍 [REPORTS DEBUG] First student data:', data.students[0])
+          if (data.students[0].first_check_in) {
+            console.log('🔍 [REPORTS DEBUG] Raw first_check_in timestamp:', data.students[0].first_check_in)
+            console.log('🔍 [REPORTS DEBUG] Formatted first_check_in:', formatTimestampInOriginalTimezone(data.students[0].first_check_in, 'dd/MM/yyyy HH:mm'))
+          }
         }
+        
+        return data
+      } catch (error) {
+        console.error('🔍 [REPORTS DEBUG] Error fetching report:', error)
+        console.error('🔍 [REPORTS DEBUG] Error details:', {
+          message: error.message,
+          response: error.response,
+          status: error.response?.status,
+          data: error.response?.data
+        })
+        throw error
       }
-      
-      return data
     },
     enabled: false, // Only fetch when user clicks "Generate Report"
   })
+  
+  // Debug: Log error if any
+  if (error) {
+    console.error('🔍 [REPORTS DEBUG] Query error:', error)
+  }
 
   const handleGenerateReport = () => {
+    console.log('🔍 [REPORTS DEBUG] Generate report clicked')
+    console.log('🔍 [REPORTS DEBUG] Current filters:', {
+      selectedBranch,
+      selectedGrade,
+      selectedLevel,
+      selectedClass,
+      dateFrom,
+      dateTo
+    })
     refetch()
   }
+  
+  // Debug: Log whenever reportData changes
+  useEffect(() => {
+    if (reportData) {
+      console.log('🔍 [REPORTS DEBUG] Report data updated:', reportData)
+      if (reportData.students && reportData.students.length > 0) {
+        reportData.students.forEach((student, index) => {
+          if (student.first_check_in) {
+            console.log(`🔍 [REPORTS DEBUG] Student ${index + 1} (${student.student_name}):`, {
+              raw_timestamp: student.first_check_in,
+              formatted: formatTimestampInOriginalTimezone(student.first_check_in, 'dd/MM/yyyy HH:mm')
+            })
+          }
+        })
+      }
+    }
+  }, [reportData])
 
   const generatePDF = async (viewInBrowser = false) => {
     if (!reportData) return
@@ -620,6 +665,17 @@ function Reports() {
           </Grid>
         </Grid>
       </Paper>
+
+      {error && (
+        <Box sx={{ p: 3, mb: 3, bgcolor: 'error.light', borderRadius: 1 }}>
+          <Typography color="error">
+            Error loading report: {error.message || 'Unknown error'}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Check the browser console (F12) for more details
+          </Typography>
+        </Box>
+      )}
 
       {isLoading && (
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
