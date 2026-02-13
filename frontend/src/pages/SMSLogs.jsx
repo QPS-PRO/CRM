@@ -177,7 +177,7 @@ function SMSLogs() {
       ? formatTimestampInOriginalTimezone(log.attendance.timestamp, 'dd MMM, yyyy HH:mm')
       : '-',
     status: getStatusChip(log.status),
-    sent_at: log.sent_at ? format(new Date(log.sent_at), 'dd MMM, yyyy HH:mm') : '-',
+    sent_at: log.sent_at ? formatTimestampInOriginalTimezone(log.sent_at, 'dd MMM, yyyy HH:mm') : '-',
     record: log,
   }))
 

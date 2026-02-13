@@ -61,14 +61,17 @@ class AttendanceSerializer(serializers.ModelSerializer):
             import pytz
             
             timestamp = instance.timestamp
-            # Ensure timestamp is timezone-aware
+            # Django with USE_TZ=True returns datetimes in TIME_ZONE
+            # We need to normalize to UTC first, then convert to device timezone
             if timezone.is_naive(timestamp):
                 timestamp = timezone.make_aware(timestamp, pytz.UTC)
+            else:
+                # Convert to UTC first (handles any timezone Django might have used)
+                timestamp = timestamp.astimezone(pytz.UTC)
             
-            # Convert from UTC to device timezone (to show original local time)
+            # Now convert from UTC to device timezone (to show original local time)
             device_tz = get_device_timezone()
-            if timestamp.tzinfo == pytz.UTC:
-                timestamp = timestamp.astimezone(device_tz)
+            timestamp = timestamp.astimezone(device_tz)
             
             # Return ISO format string in device timezone
             representation['timestamp'] = timestamp.isoformat()
@@ -158,6 +161,44 @@ class SMSLogSerializer(serializers.ModelSerializer):
             'sent_at', 'delivered_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def to_representation(self, instance):
+        """Convert timestamps from UTC to device timezone for display"""
+        from django.utils import timezone
+        from .utils import get_device_timezone
+        import pytz
+        
+        representation = super().to_representation(instance)
+        
+        # Convert sent_at from UTC to device timezone
+        if instance.sent_at:
+            timestamp = instance.sent_at
+            # Django with USE_TZ=True returns datetimes in TIME_ZONE
+            # We need to normalize to UTC first, then convert to device timezone
+            if timezone.is_naive(timestamp):
+                timestamp = timezone.make_aware(timestamp, pytz.UTC)
+            else:
+                # Convert to UTC first (handles any timezone Django might have used)
+                timestamp = timestamp.astimezone(pytz.UTC)
+            device_tz = get_device_timezone()
+            timestamp = timestamp.astimezone(device_tz)
+            representation['sent_at'] = timestamp.isoformat()
+        
+        # Convert delivered_at from UTC to device timezone
+        if instance.delivered_at:
+            timestamp = instance.delivered_at
+            # Django with USE_TZ=True returns datetimes in TIME_ZONE
+            # We need to normalize to UTC first, then convert to device timezone
+            if timezone.is_naive(timestamp):
+                timestamp = timezone.make_aware(timestamp, pytz.UTC)
+            else:
+                # Convert to UTC first (handles any timezone Django might have used)
+                timestamp = timestamp.astimezone(pytz.UTC)
+            device_tz = get_device_timezone()
+            timestamp = timestamp.astimezone(device_tz)
+            representation['delivered_at'] = timestamp.isoformat()
+        
+        return representation
 
 
 class AttendanceSettingsSerializer(serializers.ModelSerializer):
