@@ -727,8 +727,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 
                 # Return ISO format string in device timezone
                 first_check_in_timestamp = device_timestamp.isoformat()
-           
-           last_check_out_timestamp = None
+            
+            last_check_out_timestamp = None
             if last_check_out:
                 # Convert timestamp from UTC to device timezone for display
                 raw_timestamp = last_check_out.timestamp
