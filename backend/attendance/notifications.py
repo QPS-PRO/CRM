@@ -289,29 +289,19 @@ class SMSNotificationService:
             # Send request
             response = requests.post(url, data=data, timeout=30)
             
-            # Log response for debugging
-            print(f"📡 SMS API Response Status: {response.status_code}")
-            print(f"📡 SMS API Response Headers: {dict(response.headers)}")
-            print(f"📡 SMS API Raw Response Text: {response.text[:500]}")  # First 500 chars
-            
             response.raise_for_status()
             
             # Try to parse JSON response
             try:
                 result = response.json()
             except ValueError:
-                # If response is not JSON, log the raw text
                 raw_response = response.text
-                print(f"✗ SMS API Response is not JSON: {raw_response}")
                 return {
                     'success': False,
                     'error': f'Invalid JSON response from API: {raw_response[:200]}',
                     'status': 'FAILED',
                     'response': {'raw': raw_response}
                 }
-            
-            # Log full response for debugging
-            print(f"📡 SMS API Full Response: {result}")
             
             # Mora API returns nested structure: {status: {...}, data: {code: 100, message: "...", ref_id: ...}}
             # Check for data.code first (this is the actual SMS API response code)
@@ -345,13 +335,10 @@ class SMSNotificationService:
                         api_timestamp = timezone.make_aware(parsed_timestamp, pytz.UTC)
                     else:
                         api_timestamp = parsed_timestamp
-                except (ValueError, AttributeError) as e:
-                    print(f"⚠ Warning: Failed to parse timestamp from API response: {e}")
+                except (ValueError, AttributeError):
                     api_timestamp = None
             
             if response_code == 100:
-                # Success - SMS sent successfully
-                print(f"✓ SMS sent successfully (Code: {response_code}, Ref ID: {ref_id})")
                 return {
                     'success': True,
                     'code': response_code,
@@ -366,7 +353,6 @@ class SMSNotificationService:
                 error_msg = self.ERROR_CODES.get(response_code, f'Unknown error code: {response_code}')
                 if api_message:
                     error_msg = f'{error_msg}: {api_message}'
-                print(f"✗ SMS API Error: {error_msg} (Code: {response_code})")
                 return {
                     'success': False,
                     'error': error_msg,
@@ -381,12 +367,8 @@ class SMSNotificationService:
                 try:
                     error_data = e.response.json()
                     error_msg = error_data.get('message', str(e))
-                    print(f"✗ SMS API Request Exception: {error_msg}")
                 except (ValueError, KeyError):
                     error_msg = e.response.text or str(e)
-                    print(f"✗ SMS API Request Exception (raw): {error_msg}")
-            else:
-                print(f"✗ SMS API Request Exception: {error_msg}")
             return {'success': False, 'error': f'SMS API error: {error_msg}', 'status': 'FAILED'}
         except Exception as e:
             return {'success': False, 'error': str(e), 'status': 'FAILED'}
@@ -399,23 +381,14 @@ class SMSNotificationService:
         settings = AttendanceSettings.get_settings()
         template = settings.sms_template
         
-        # Convert UTC timestamp to device's local timezone for display
-        # The timestamp is stored in UTC in the database, but we want to show the same time
-        # as displayed on the fingerprint device (local time)
-        from .utils import get_device_timezone
-        device_tz = get_device_timezone()
-        
-        # Ensure timestamp is timezone-aware (should be UTC from database)
+        # Ensure timestamp is timezone-aware
         if timezone.is_naive(attendance.timestamp):
             timestamp = timezone.make_aware(attendance.timestamp)
         else:
             timestamp = attendance.timestamp
         
-        # Convert from UTC to device's local timezone
-        local_timestamp = timestamp.astimezone(device_tz)
-        
-        # Format time from local timezone timestamp
-        time_str = local_timestamp.strftime('%I:%M %p')
+        # Format time directly from stored timestamp (no timezone conversion)
+        time_str = timestamp.strftime('%I:%M %p')
         
         # Get parent name
         parent_name = parent.first_name if parent and parent.first_name else "Parent"
@@ -431,26 +404,10 @@ class SMSNotificationService:
     
     def send_attendance_notification(self, attendance: Attendance) -> Dict:
         """Send attendance SMS notification to all parents of a student and log results"""
-        if not self.enabled:
-            print("⚠ SMS notifications are disabled (SMS_ENABLED=False)")
-            return {'success': False, 'sent': 0, 'failed': 0, 'errors': ['SMS notifications are disabled']}
-        
-        if not all([self.api_key, self.username, self.sender_name]):
-            print(f"⚠ SMS credentials missing")
-            return {'success': False, 'sent': 0, 'failed': 0, 'errors': ['SMS API credentials not configured']}
-        
         student = attendance.student
         parents = student.parents.all()
         
-        if not parents.exists():
-            print(f"⚠ No parents found for student {student.full_name}")
-            return {
-                'success': False,
-                'sent': 0,
-                'failed': 0,
-                'errors': [f'No parents found for student {student.full_name}']
-            }
-        
+        # Always create log entries for audit purposes, even if SMS is disabled
         results = {
             'success': True,
             'sent': 0,
@@ -459,6 +416,59 @@ class SMSNotificationService:
             'logs': []
         }
         
+        if not self.enabled:
+            # Create log entries for each parent indicating SMS is disabled
+            for parent in parents:
+                message = self._format_attendance_message(student, attendance, parent)
+                sms_log = SMSLog.objects.create(
+                    student=student,
+                    parent=parent,
+                    attendance=attendance,
+                    phone_number=parent.phone_number or '',
+                    message=message,
+                    status='FAILED',
+                    error_message='SMS notifications are disabled'
+                )
+                results['logs'].append(sms_log.id)
+                results['failed'] += 1
+            results['success'] = False
+            results['errors'].append('SMS notifications are disabled')
+            return results
+        
+        if not all([self.api_key, self.username, self.sender_name]):
+            missing = []
+            if not self.api_key:
+                missing.append('SMS_API_KEY')
+            if not self.username:
+                missing.append('SMS_USERNAME')
+            if not self.sender_name:
+                missing.append('SMS_SENDER_NAME')
+            error_msg = f'SMS API credentials not configured. Missing: {", ".join(missing)}'
+            # Create log entries for each parent indicating credentials are missing
+            for parent in parents:
+                message = self._format_attendance_message(student, attendance, parent)
+                sms_log = SMSLog.objects.create(
+                    student=student,
+                    parent=parent,
+                    attendance=attendance,
+                    phone_number=parent.phone_number or '',
+                    message=message,
+                    status='FAILED',
+                    error_message=error_msg
+                )
+                results['logs'].append(sms_log.id)
+                results['failed'] += 1
+            results['success'] = False
+            results['errors'].append(error_msg)
+            return results
+        
+        if not parents.exists():
+            error_msg = f'No parents found for student {student.full_name}'
+            # No log entry created when no parents exist (parent field is required)
+            results['success'] = False
+            results['errors'].append(error_msg)
+            return results
+        
         for parent in parents:
             # Format personalized message for this parent
             message = self._format_attendance_message(student, attendance, parent)
@@ -466,7 +476,6 @@ class SMSNotificationService:
             # Check if parent has phone number
             if not parent.phone_number:
                 error_msg = f'Parent {parent.full_name} has no phone number'
-                print(f"⚠ {error_msg}")
                 results['errors'].append(error_msg)
                 results['failed'] += 1
                 
@@ -484,22 +493,17 @@ class SMSNotificationService:
                 continue
             
             # Send SMS message
-            print(f"📤 Sending SMS to {parent.full_name} ({parent.phone_number})...")
             result = self._send_sms_message(parent.phone_number, message)
             
             # Determine status based on API response
             if result.get('success'):
                 status = 'SENT'
-                # Use timestamp from API response if available, otherwise use current time
-                # The API timestamp is the actual time the SMS was sent by the provider
                 sent_at = result.get('timestamp') or timezone.now()
-                print(f"✓ SMS sent successfully to {parent.full_name}")
                 results['sent'] += 1
             else:
                 status = 'FAILED'
                 sent_at = None
                 error_msg = result.get('error', 'Unknown error')
-                print(f"✗ Failed to send SMS to {parent.full_name}: {error_msg}")
                 results['failed'] += 1
                 results['errors'].append(f'Failed to send to {parent.full_name}: {error_msg}')
             

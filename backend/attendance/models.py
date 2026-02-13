@@ -273,55 +273,33 @@ class AttendanceSettings(models.Model):
         Calculate attendance status based on check-in datetime
         Returns: 'ATTENDED', 'LATE', or 'ABSENT'
         
-        Note: The timestamp is stored in UTC, but we compare it in the device's local timezone
-        (same timezone used in services.py when syncing from device)
+        Note: Uses the timestamp as stored in the database without timezone conversion.
+        The time component is extracted directly and compared with attendance settings.
         """
-        from django.utils import timezone
-        from datetime import datetime, time
-        import logging
-        import pytz
-        
-        logger = logging.getLogger(__name__)
+        from datetime import time
         
         settings = AttendanceSettings.get_settings()
+        check_in_time_full = check_in_datetime.time()
         
-        # Ensure timezone-aware datetime
-        if timezone.is_naive(check_in_datetime):
-            check_in_datetime = timezone.make_aware(check_in_datetime)
+        check_in_time = time(check_in_time_full.hour, check_in_time_full.minute)
         
-        # Convert check_in_datetime from UTC to device's local timezone
-        # Use the same timezone utility as in services.py for consistency
-        from .utils import get_device_timezone
-        device_tz = get_device_timezone()
-        
-        # Convert UTC datetime to device's local timezone for comparison
-        if timezone.is_aware(check_in_datetime):
-            # Convert from UTC (or whatever timezone) to device timezone
-            check_in_local = check_in_datetime.astimezone(device_tz)
-        else:
-            check_in_local = check_in_datetime
-        
-        # Get the time component from check-in datetime (in device's local timezone)
-        check_in_time = check_in_local.time()
-        
-        # Get time window settings
         attendance_start_time = settings.attendance_start_time
         attendance_end_time = settings.attendance_end_time
         lateness_start_time = settings.lateness_start_time
         lateness_end_time = settings.lateness_end_time
         
-        # Compare times directly (more reliable than datetime comparison)
-        # Determine status by comparing time components
-        if attendance_start_time <= check_in_time <= attendance_end_time:
-            logger.debug(f"ATTENDED: {check_in_time} is between {attendance_start_time} and {attendance_end_time}")
+        attendance_start = time(attendance_start_time.hour, attendance_start_time.minute)
+        attendance_end = time(attendance_end_time.hour, attendance_end_time.minute)
+        lateness_start = time(lateness_start_time.hour, lateness_start_time.minute)
+        lateness_end = time(lateness_end_time.hour, lateness_end_time.minute)
+
+        # Check if check-in time falls within attendance window (inclusive boundaries)
+        if attendance_start <= check_in_time <= attendance_end:
             return 'ATTENDED'
-        elif lateness_start_time < check_in_time <= lateness_end_time:
-            logger.debug(f"LATE: {check_in_time} is between {lateness_start_time} and {lateness_end_time}")
+        # Check if check-in time falls within lateness window (inclusive boundaries)
+        elif lateness_start <= check_in_time <= lateness_end:
             return 'LATE'
         else:
-            logger.debug(f"ABSENT: {check_in_time} is not in any window")
-            logger.debug(f"  Attendance window: {attendance_start_time} - {attendance_end_time}")
-            logger.debug(f"  Lateness window: {lateness_start_time} - {lateness_end_time}")
             return 'ABSENT'
 
 
@@ -359,9 +337,6 @@ def update_periodic_task(sender, instance, **kwargs):
         except PeriodicTask.DoesNotExist:
             # Task doesn't exist yet, will be created on next app startup
             pass
-    except Exception as e:
+    except Exception:
         # Don't fail if Celery Beat tables don't exist
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Could not update periodic task: {e}")
-
+        pass

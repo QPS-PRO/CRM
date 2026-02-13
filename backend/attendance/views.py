@@ -245,6 +245,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             timestamp = serializer.validated_data["timestamp"]
             device_serial = serializer.validated_data.get("device_serial")
 
+            # Ensure timestamp is UTC-aware without timezone conversion
+            if timezone.is_naive(timestamp):
+                timestamp = timezone.make_aware(timestamp, pytz.UTC)
+            else:
+                timestamp = timestamp.astimezone(pytz.UTC)
+
             try:
                 student = Student.objects.get(id=fingerprint_id, is_active=True)
             except Student.DoesNotExist:
@@ -702,6 +708,28 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 attendance_type="CHECK_OUT"
             ).count()
 
+            # Get timestamps directly, ensuring they're in UTC (raw database value)
+            # This returns the timestamp as stored in the database without timezone conversion
+            first_check_in_timestamp = None
+            if first_check_in:
+                timestamp_utc = first_check_in.timestamp
+                # Ensure it's timezone-aware and in UTC
+                if timezone.is_naive(timestamp_utc):
+                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
+                else:
+                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
+                first_check_in_timestamp = timestamp_utc
+            
+            last_check_out_timestamp = None
+            if last_check_out:
+                timestamp_utc = last_check_out.timestamp
+                # Ensure it's timezone-aware and in UTC
+                if timezone.is_naive(timestamp_utc):
+                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
+                else:
+                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
+                last_check_out_timestamp = timestamp_utc
+
             report_data.append(
                 {
                     "student_id": student.id,
@@ -714,12 +742,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     "has_attended": has_attended,
                     "attendance_status": attendance_status_display,
                     "attendance_status_code": best_status,
-                    "first_check_in": first_check_in.timestamp.isoformat()
-                    if first_check_in
-                    else None,
-                    "last_check_out": last_check_out.timestamp.isoformat()
-                    if last_check_out
-                    else None,
+                    "first_check_in": first_check_in_timestamp,
+                    "last_check_out": last_check_out_timestamp,
                     "check_in_count": check_in_count,
                     "check_out_count": check_out_count,
                     "total_attendance_days": check_in_count,
@@ -895,7 +919,6 @@ def iclock_cdata(request):
 
     Expected URL format: /iclock/cdata?SN=<serial_number>&table=<table_name>&OpStamp=<timestamp>
     """
-    # Get device serial number from query parameters
     serial_number = request.GET.get("SN", "").strip()
     table = request.GET.get("table", "").strip()
     op_stamp = request.GET.get("OpStamp", "").strip()
@@ -903,24 +926,73 @@ def iclock_cdata(request):
     if not serial_number:
         return HttpResponse("SN parameter is required", status=400)
 
-    # Try to find the device by serial number
     try:
         device = FingerprintDevice.objects.get(
             serial_number=serial_number, status="ACTIVE"
         )
     except FingerprintDevice.DoesNotExist:
-        # Device not found - return error but don't fail completely
-        # Some devices might send data before being registered
-        print(
-            f"Warning: Device with serial number {serial_number} not found in database"
-        )
-        # Return OK to prevent device from retrying indefinitely
         return HttpResponse("OK", status=200)
 
     if request.method == "GET":
-        # GET request - device handshake/initialization
-        # Return device configuration or acknowledgment
-        response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+        request_path = request.path
+        
+        if 'getrequest' in request_path.lower():
+            device_tz = get_device_timezone()
+            server_now = timezone.now()
+            server_local_time = server_now.astimezone(device_tz)
+            
+            info_param = request.GET.get("INFO", "")
+            device_model = None
+            device_version = None
+            
+            if info_param:
+                try:
+                    parts = info_param.split(",")
+                    if len(parts) > 0 and "Ver" in parts[0]:
+                        device_version = parts[0].strip()
+                    if len(parts) > 1:
+                        device_model = parts[1].strip() if parts[1].strip() else None
+                except Exception:
+                    pass
+            
+            time_formats = {
+                'standard': server_local_time.strftime("%Y-%m-%d %H:%M:%S"),
+                'iso': server_local_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                'compact': server_local_time.strftime("%Y%m%d%H%M%S"),
+                'unix': str(int(server_local_time.timestamp())),
+            }
+            
+            format_param = request.GET.get("format", "").lower()
+            cmd_param = request.GET.get("cmd", "").lower()
+            
+            use_format = 'standard'
+            use_cmd = 'GetTime'
+            
+            if format_param in time_formats:
+                use_format = format_param
+            
+            if cmd_param in ['gettime', 'settime']:
+                use_cmd = cmd_param.capitalize()
+            
+            time_str = time_formats[use_format]
+            
+            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+                        <Response>
+                            <Cmd>{use_cmd}</Cmd>
+                            <Status>OK</Status>
+                            <Time>{time_str}</Time>
+                        </Response>"""
+            
+            response = HttpResponse(response_xml, content_type="application/xml", status=200)
+            
+            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response['Pragma'] = 'no-cache'
+            response['Expires'] = '0'
+            response['Content-Length'] = str(len(response_xml))
+            
+            return response
+        else:
+            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
                             <Cmd>GetOptions</Cmd>
                             <Status>OK</Status>
@@ -929,27 +1001,21 @@ def iclock_cdata(request):
                                 <Language>69</Language>
                             </Options>
                         </Response>"""
-        return HttpResponse(response_xml, content_type="application/xml", status=200)
+            return HttpResponse(response_xml, content_type="application/xml", status=200)
 
     elif request.method == "POST":
-        # POST request - attendance data push
         try:
-            # Get raw request body
             body = request.body.decode("utf-8") if request.body else ""
 
-            # Parse XML data if present
             attendance_records = []
             if body:
                 try:
                     root = ET.fromstring(body)
-                    # ZKTeco devices send data in various formats
-                    # Format 1: <Record> elements with PIN, DateTime, Status
                     for record in root.findall(".//Record"):
                         user_id = None
                         timestamp_str = None
                         punch = "0"
 
-                        # Try different element names that ZKTeco devices use
                         pin_elem = (
                             record.find("PIN")
                             or record.find("pin")
@@ -985,42 +1051,68 @@ def iclock_cdata(request):
                                 }
                             )
 
-                    # Format 2: Direct <PIN>, <DateTime>, <Status> elements at root level
                     if not attendance_records:
                         pin_elem = root.find("PIN") or root.find("pin")
                         datetime_elem = root.find("DateTime") or root.find("datetime")
                         status_elem = root.find("Status") or root.find("status")
 
                         if pin_elem is not None and datetime_elem is not None:
+                            user_id = pin_elem.text
+                            timestamp_str = datetime_elem.text
+                            punch = status_elem.text if status_elem is not None else "0"
                             attendance_records.append(
                                 {
-                                    "user_id": pin_elem.text,
-                                    "timestamp_str": datetime_elem.text,
-                                    "punch": status_elem.text
-                                    if status_elem is not None
-                                    else "0",
+                                    "user_id": user_id,
+                                    "timestamp_str": timestamp_str,
+                                    "punch": punch,
                                 }
                             )
 
-                except ET.ParseError as e:
-                    # If not XML, try to parse as plain text or other format
-                    # Some devices send data in different formats
-                    print(
-                        f"Could not parse XML data from device {serial_number}: {str(e)}"
-                    )
-                    print(f"Body content: {body[:500]}")
+                except ET.ParseError:
+                    pass
 
-            # If no records found in XML, try to parse from query parameters or body
-            if not attendance_records and table == "0PERL0G":
-                # 0PERL0G typically means attendance log table
-                # The data might be in the body in a different format
-                # For now, we'll log it and return OK
-                print(
-                    f"Received attendance data from device {serial_number}, table: {table}, OpStamp: {op_stamp}"
-                )
-                print(f"Body content: {body[:500] if body else 'Empty'}")
+            if not attendance_records and body:
+                lines = body.strip().split('\n')
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    parts = line.split()
+                    
+                    if len(parts) >= 2:
+                        user_id = parts[0]
+                        
+                        if len(parts) >= 3:
+                            if (len(parts[1]) == 10 and ('-' in parts[1] or '/' in parts[1])) and ':' in parts[2]:
+                                timestamp_str = f"{parts[1]} {parts[2]}"
+                                punch = parts[3] if len(parts) > 3 else "0"
+                            else:
+                                timestamp_str = f"{parts[1]} {parts[2]}"
+                                punch = parts[3] if len(parts) > 3 else "0"
+                        elif len(parts) == 2:
+                            timestamp_str = parts[1]
+                            punch = "0"
+                        else:
+                            continue
+                        
+                        timestamp_valid = False
+                        for fmt in ["%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"]:
+                            try:
+                                datetime.strptime(timestamp_str, fmt)
+                                timestamp_valid = True
+                                break
+                            except ValueError:
+                                continue
+                        
+                        if timestamp_valid:
+                            attendance_records.append({
+                                "user_id": user_id,
+                                "timestamp_str": timestamp_str,
+                                "punch": punch,
+                            })
 
-            # Process attendance records
             processed_count = 0
             errors = []
 
@@ -1030,16 +1122,13 @@ def iclock_cdata(request):
                     timestamp_str = record["timestamp_str"]
                     punch = int(record["punch"]) if record["punch"].isdigit() else 0
 
-                    # Find student by user_id (could be student_id or student.id)
                     student = None
                     try:
-                        # Try matching by student_id first
                         student = Student.objects.get(
                             student_id=str(user_id), is_active=True
                         )
                     except Student.DoesNotExist:
                         try:
-                            # Try matching by ID if user_id is numeric
                             user_id_int = int(user_id)
                             student = Student.objects.get(
                                 id=user_id_int, is_active=True
@@ -1051,10 +1140,7 @@ def iclock_cdata(request):
                         errors.append(f"Student not found for user_id: {user_id}")
                         continue
 
-                    # Parse timestamp
-                    # ZKTeco devices typically send timestamp in format: YYYY-MM-DD HH:MM:SS
                     try:
-                        # Try common ZKTeco timestamp formats
                         timestamp = datetime.strptime(
                             timestamp_str, "%Y-%m-%d %H:%M:%S"
                         )
@@ -1069,24 +1155,18 @@ def iclock_cdata(request):
                                     timestamp_str, "%Y-%m-%dT%H:%M:%S"
                                 )
                             except ValueError:
-                                # Fallback to current time if parsing fails
                                 timestamp = timezone.now()
                                 errors.append(
                                     f"Could not parse timestamp: {timestamp_str}, using current time"
                                 )
-
-                    # Convert to timezone-aware datetime
-                    device_tz = get_device_timezone()
+                    
                     if timezone.is_naive(timestamp):
-                        timestamp = device_tz.localize(timestamp)
-                    # Convert to UTC for storage
-                    timestamp = timestamp.astimezone(pytz.UTC)
+                        timestamp = timezone.make_aware(timestamp, pytz.UTC)
+                    else:
+                        timestamp = timestamp.astimezone(pytz.UTC)
 
-                    # Determine attendance type
-                    # Punch: 0 = Check-in, 1 = Check-out (may vary by device model)
-                    attendance_type = "CHECK_IN" if punch == 0 else "CHECK_OUT"
+                    attendance_type = "CHECK_IN"
 
-                    # Check if record already exists (within 1 minute tolerance)
                     time_tolerance = timedelta(minutes=1)
                     existing = Attendance.objects.filter(
                         student=student,
@@ -1096,7 +1176,6 @@ def iclock_cdata(request):
                     ).first()
 
                     if not existing:
-                        # Create attendance record
                         attendance = Attendance.create_attendance(
                             student=student,
                             attendance_type=attendance_type,
@@ -1104,27 +1183,24 @@ def iclock_cdata(request):
                             device=device,
                         )
 
-                        # Send notifications
                         try:
                             sms_service = SMSNotificationService()
-                            sms_service.send_attendance_notification(attendance)
+                            sms_result = sms_service.send_attendance_notification(attendance)
+                            
+                            if not sms_result.get('success') and sms_result.get('errors'):
+                                errors.extend([f"SMS: {err}" for err in sms_result.get('errors', [])])
                         except Exception as e:
-                            print(f"Error sending SMS notification: {str(e)}")
+                            errors.append(f"Error sending SMS notification: {str(e)}")
 
                         processed_count += 1
 
                 except Exception as e:
-                    error_msg = f"Error processing record: {str(e)}"
-                    errors.append(error_msg)
-                    print(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+                    errors.append(f"Error processing record: {str(e)}")
                     continue
 
-            # Update device last sync time
             device.last_sync = timezone.now()
             device.save(update_fields=["last_sync"])
 
-            # Return response in ZKTeco expected format
-            # ZKTeco devices expect XML response with status
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                             <Response>
                                 <Cmd>Data</Cmd>
@@ -1139,9 +1215,7 @@ def iclock_cdata(request):
 
         except Exception as e:
             error_msg = f"Error processing attendance data from device {serial_number}: {str(e)}"
-            print(f"{error_msg}\nTraceback: {traceback.format_exc()}")
 
-            # Return error response but still acknowledge receipt
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                             <Response>
                                 <Cmd>Data</Cmd>

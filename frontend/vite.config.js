@@ -8,7 +8,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://16.24.159.233',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path, // Don't rewrite the path
