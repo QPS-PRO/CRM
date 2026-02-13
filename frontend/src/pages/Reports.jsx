@@ -112,7 +112,7 @@ function Reports() {
 
   const { data: reportData, isLoading, refetch } = useQuery({
     queryKey: ['attendance-report', selectedBranch, selectedGrade, selectedLevel, selectedClass, dateFrom, dateTo],
-    queryFn: () => {
+    queryFn: async () => {
       const params = {}
       if (selectedBranch) params.branch_id = selectedBranch
       if (selectedGrade) params.grade = selectedGrade
@@ -120,7 +120,19 @@ function Reports() {
       if (selectedClass) params.class = selectedClass
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
-      return getAttendanceReport(params)
+      const data = await getAttendanceReport(params)
+      
+      // Debug: Log report data to console
+      console.log('🔍 [REPORTS DEBUG] Report data received:', data)
+      if (data?.students && data.students.length > 0) {
+        console.log('🔍 [REPORTS DEBUG] First student data:', data.students[0])
+        if (data.students[0].first_check_in) {
+          console.log('🔍 [REPORTS DEBUG] Raw first_check_in timestamp:', data.students[0].first_check_in)
+          console.log('🔍 [REPORTS DEBUG] Formatted first_check_in:', formatTimestampInOriginalTimezone(data.students[0].first_check_in, 'dd/MM/yyyy HH:mm'))
+        }
+      }
+      
+      return data
     },
     enabled: false, // Only fetch when user clicks "Generate Report"
   })
@@ -741,9 +753,16 @@ function Reports() {
                         />
                       </TableCell>
                       <TableCell>
-                        {student.first_check_in
-                          ? formatTimestampInOriginalTimezone(student.first_check_in, 'dd/MM/yyyy HH:mm')
-                          : '-'}
+                        {student.first_check_in ? (() => {
+                          const formatted = formatTimestampInOriginalTimezone(student.first_check_in, 'dd/MM/yyyy HH:mm')
+                          // Debug: Log each timestamp as it's rendered
+                          console.log(`🔍 [REPORTS DEBUG] Student: ${student.student_name}`, {
+                            raw: student.first_check_in,
+                            formatted: formatted,
+                            timestampType: typeof student.first_check_in
+                          })
+                          return formatted
+                        })() : '-'}
                       </TableCell>
                       <TableCell>{student.check_in_count}</TableCell>
                     </TableRow>

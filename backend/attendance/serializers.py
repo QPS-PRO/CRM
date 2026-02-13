@@ -60,21 +60,24 @@ class AttendanceSerializer(serializers.ModelSerializer):
         # Convert timestamp from UTC to device timezone for display
         # The frontend's formatTimestampInOriginalTimezone extracts time components directly,
         # so we need to provide the timestamp in device timezone
+        # Work directly with instance.timestamp to avoid any conversion from super()
         if instance.timestamp:
-            # Ensure timestamp is timezone-aware (should be UTC from database)
-            if timezone.is_naive(instance.timestamp):
-                timestamp = timezone.make_aware(instance.timestamp, pytz.UTC)
-            else:
-                timestamp = instance.timestamp
+            # Get the raw timestamp from the instance (stored in UTC in database)
+            raw_timestamp = instance.timestamp
+            
+            # Ensure timestamp is timezone-aware
+            if timezone.is_naive(raw_timestamp):
+                raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
+            elif raw_timestamp.tzinfo != pytz.UTC:
+                # If it's in a different timezone, convert to UTC first
+                raw_timestamp = raw_timestamp.astimezone(pytz.UTC)
             
             # Convert from UTC to device timezone
-            # This ensures the ISO string contains the correct local time
             device_tz = get_device_timezone()
-            if timestamp.tzinfo == pytz.UTC:
-                timestamp = timestamp.astimezone(device_tz)
+            device_timestamp = raw_timestamp.astimezone(device_tz)
             
             # Return ISO format string in device timezone
-            representation['timestamp'] = timestamp.isoformat()
+            representation['timestamp'] = device_timestamp.isoformat()
         
         # Always recalculate status for CHECK_IN records to ensure it's correct
         if instance.attendance_type == 'CHECK_IN':
