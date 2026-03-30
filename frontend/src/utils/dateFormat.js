@@ -12,6 +12,14 @@ export function formatTimestampInOriginalTimezone(timestampString, formatString 
   if (!timestampString) return '-'
   
   try {
+    // Debug: Log input
+    console.log('🔍 [DATEFORMAT DEBUG] Input:', {
+      timestampString,
+      formatString,
+      type: typeof timestampString,
+      fullString: String(timestampString)
+    })
+    
     // Parse the ISO string to extract date/time components
     // Format: "2026-01-15T03:47:00+03:00" or "2026-01-15T03:47:00Z" or "2026-01-15T03:47:00"
     const isoMatch = timestampString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
@@ -24,6 +32,18 @@ export function formatTimestampInOriginalTimezone(timestampString, formatString 
       const hoursNum = parseInt(hours)
       const minutesNum = parseInt(minutes)
       
+      // Debug: Log extracted components
+      console.log('🔍 [DATEFORMAT DEBUG] Extracted components:', {
+        year,
+        month,
+        day,
+        hours,
+        minutes,
+        hoursNum,
+        minutesNum,
+        timezone: timestampString.substring(19) // Show timezone part if exists
+      })
+      
       // Format based on the format string
       let result = formatString
       
@@ -35,6 +55,9 @@ export function formatTimestampInOriginalTimezone(timestampString, formatString 
       result = result.replace(/dd/g, day.padStart(2, '0'))
       result = result.replace(/HH/g, hours.padStart(2, '0'))
       result = result.replace(/mm/g, minutes.padStart(2, '0'))
+      
+      // Debug: Log result
+      console.log('🔍 [DATEFORMAT DEBUG] Formatted result:', result)
       
       return result
     }

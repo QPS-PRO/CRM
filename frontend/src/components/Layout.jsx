@@ -285,7 +285,7 @@ function Layout({ children }) {
                 whiteSpace: 'nowrap',
               }}
             >
-              {language === 'en' ? 'Qurtubah Al-Ahliyah' : 'مدرسة قرطبة'}
+              {language === 'en' ? 'Qurtubah Private' : 'مدارس قرطبة'}
             </Typography>
             <Typography
               variant="h6"

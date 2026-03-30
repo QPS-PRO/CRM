@@ -708,6 +708,33 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 attendance_type="CHECK_OUT"
             ).count()
 
+            # Get timestamps WITHOUT timezone conversion - display raw UTC time (which is device's local time)
+            first_check_in_timestamp = None
+            if first_check_in:
+                # Return timestamp as-is (stored in UTC which represents device's local time)
+                # Format without timezone offset to display the raw time components
+                raw_timestamp = first_check_in.timestamp
+                
+                # Ensure timezone-aware
+                if timezone.is_naive(raw_timestamp):
+                    raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
+                
+                # Format as ISO string without timezone offset
+                first_check_in_timestamp = raw_timestamp.strftime('%Y-%m-%dT%H:%M:%S')
+            
+            last_check_out_timestamp = None
+            if last_check_out:
+                # Return timestamp as-is (stored in UTC which represents device's local time)
+                # Format without timezone offset to display the raw time components
+                raw_timestamp = last_check_out.timestamp
+                
+                # Ensure timezone-aware
+                if timezone.is_naive(raw_timestamp):
+                    raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
+                
+                # Format as ISO string without timezone offset
+                last_check_out_timestamp = raw_timestamp.strftime('%Y-%m-%dT%H:%M:%S')
+
             report_data.append(
                 {
                     "student_id": student.id,
@@ -720,12 +747,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     "has_attended": has_attended,
                     "attendance_status": attendance_status_display,
                     "attendance_status_code": best_status,
-                    "first_check_in": first_check_in.timestamp.isoformat()
-                    if first_check_in
-                    else None,
-                    "last_check_out": last_check_out.timestamp.isoformat()
-                    if last_check_out
-                    else None,
+                    "first_check_in": first_check_in_timestamp,
+                    "last_check_out": last_check_out_timestamp,
                     "check_in_count": check_in_count,
                     "check_out_count": check_out_count,
                     "total_attendance_days": check_in_count,
