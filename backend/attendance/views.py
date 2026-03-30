@@ -708,27 +708,32 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 attendance_type="CHECK_OUT"
             ).count()
 
-            # Get timestamps directly, ensuring they're in UTC (raw database value)
-            # This returns the timestamp as stored in the database without timezone conversion
+            # Get timestamps WITHOUT timezone conversion - display raw UTC time (which is device's local time)
             first_check_in_timestamp = None
             if first_check_in:
-                timestamp_utc = first_check_in.timestamp
-                # Ensure it's timezone-aware and in UTC
-                if timezone.is_naive(timestamp_utc):
-                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
-                else:
-                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
-                first_check_in_timestamp = timestamp_utc
+                # Return timestamp as-is (stored in UTC which represents device's local time)
+                # Format without timezone offset to display the raw time components
+                raw_timestamp = first_check_in.timestamp
+                
+                # Ensure timezone-aware
+                if timezone.is_naive(raw_timestamp):
+                    raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
+                
+                # Format as ISO string without timezone offset
+                first_check_in_timestamp = raw_timestamp.strftime('%Y-%m-%dT%H:%M:%S')
             
             last_check_out_timestamp = None
             if last_check_out:
-                timestamp_utc = last_check_out.timestamp
-                # Ensure it's timezone-aware and in UTC
-                if timezone.is_naive(timestamp_utc):
-                    timestamp_utc = timezone.make_aware(timestamp_utc, pytz.UTC)
-                else:
-                    timestamp_utc = timestamp_utc.astimezone(pytz.UTC)
-                last_check_out_timestamp = timestamp_utc
+                # Return timestamp as-is (stored in UTC which represents device's local time)
+                # Format without timezone offset to display the raw time components
+                raw_timestamp = last_check_out.timestamp
+                
+                # Ensure timezone-aware
+                if timezone.is_naive(raw_timestamp):
+                    raw_timestamp = timezone.make_aware(raw_timestamp, pytz.UTC)
+                
+                # Format as ISO string without timezone offset
+                last_check_out_timestamp = raw_timestamp.strftime('%Y-%m-%dT%H:%M:%S')
 
             report_data.append(
                 {
