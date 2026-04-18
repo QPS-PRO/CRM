@@ -4,9 +4,9 @@ from .models import FingerprintDevice, Attendance, SMSLog
 
 @admin.register(FingerprintDevice)
 class FingerprintDeviceAdmin(admin.ModelAdmin):
-    list_display = ['name', 'model', 'ip_address', 'port', 'grade_category', 'status', 'is_connected', 'last_sync', 'created_at']
+    list_display = ['name', 'model', 'ip_address', 'port', 'grade_category', 'status', 'is_connected', 'adms_send_utc_time', 'last_sync', 'created_at']
     search_fields = ['name', 'ip_address', 'serial_number', 'grade_category']
-    list_filter = ['model', 'status', 'grade_category', 'is_connected', 'created_at']
+    list_filter = ['model', 'status', 'grade_category', 'is_connected', 'adms_send_utc_time', 'created_at']
     readonly_fields = ['created_at', 'updated_at', 'last_sync']
 
 

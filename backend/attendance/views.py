@@ -945,7 +945,13 @@ def iclock_cdata(request):
             device_tz = get_device_timezone()
             server_now = timezone.now()
             server_local_time = server_now.astimezone(device_tz)
-            
+            # Some firmware interprets <Time> as UTC then applies device TZ; those need UTC here.
+            time_basis = (
+                server_now.astimezone(pytz.UTC)
+                if device.adms_send_utc_time
+                else server_local_time
+            )
+
             info_param = request.GET.get("INFO", "")
             device_model = None
             device_version = None
@@ -961,10 +967,10 @@ def iclock_cdata(request):
                     pass
             
             time_formats = {
-                'standard': server_local_time.strftime("%Y-%m-%d %H:%M:%S"),
-                'iso': server_local_time.strftime("%Y-%m-%dT%H:%M:%S"),
-                'compact': server_local_time.strftime("%Y%m%d%H%M%S"),
-                'unix': str(int(server_local_time.timestamp())),
+                'standard': time_basis.strftime("%Y-%m-%d %H:%M:%S"),
+                'iso': time_basis.strftime("%Y-%m-%dT%H:%M:%S"),
+                'compact': time_basis.strftime("%Y%m%d%H%M%S"),
+                'unix': str(int(time_basis.timestamp())),
             }
             
             format_param = request.GET.get("format", "").lower()

@@ -12,6 +12,7 @@ class FingerprintDeviceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'model', 'ip_address', 'port', 'serial_number',
             'branch', 'branch_id', 'grade_category', 'levels', 'status', 'last_sync', 'is_connected',
+            'adms_send_utc_time',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'last_sync']

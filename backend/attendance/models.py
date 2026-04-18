@@ -30,6 +30,14 @@ class FingerprintDevice(models.Model):
     )
     status = models.CharField(max_length=20, choices=DEVICE_STATUS_CHOICES, default='ACTIVE')
     last_sync = models.DateTimeField(null=True, blank=True, help_text="Last synchronization time")
+    adms_send_utc_time = models.BooleanField(
+        default=False,
+        help_text=(
+            "If enabled, ADMS /iclock/getrequest <Time> is sent in UTC. "
+            "Use for firmware (e.g. some Uface models) that treats the value as UTC and applies "
+            "the device timezone on top — sending local time would shift the clock by that offset."
+        ),
+    )
     is_connected = models.BooleanField(default=False, help_text="Current connection status")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
