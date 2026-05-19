@@ -919,8 +919,9 @@ def iclock_cdata(request):
     ZKTeco ADMS endpoint for receiving attendance data from devices.
 
     This endpoint handles:
-    - GET requests: Device handshake/initialization
-    - POST requests: Attendance data push from device
+    - GET /iclock/cdata: Device handshake/initialization (GetOptions)
+    - GET /iclock/getrequest: Acknowledgment only — no <Time> is sent (prevents clock changes)
+    - POST: Attendance data push from device
 
     Expected URL format: /iclock/cdata?SN=<serial_number>&table=<table_name>&OpStamp=<timestamp>
     """
@@ -942,65 +943,21 @@ def iclock_cdata(request):
         request_path = request.path
         
         if 'getrequest' in request_path.lower():
-            device_tz = get_device_timezone()
-            server_now = timezone.now()
-            server_local_time = server_now.astimezone(device_tz)
-            # Some firmware interprets <Time> as UTC then applies device TZ; those need UTC here.
-            time_basis = (
-                server_now.astimezone(pytz.UTC)
-                if device.adms_send_utc_time
-                else server_local_time
-            )
-
-            info_param = request.GET.get("INFO", "")
-            device_model = None
-            device_version = None
-            
-            if info_param:
-                try:
-                    parts = info_param.split(",")
-                    if len(parts) > 0 and "Ver" in parts[0]:
-                        device_version = parts[0].strip()
-                    if len(parts) > 1:
-                        device_model = parts[1].strip() if parts[1].strip() else None
-                except Exception:
-                    pass
-            
-            time_formats = {
-                'standard': time_basis.strftime("%Y-%m-%d %H:%M:%S"),
-                'iso': time_basis.strftime("%Y-%m-%dT%H:%M:%S"),
-                'compact': time_basis.strftime("%Y%m%d%H%M%S"),
-                'unix': str(int(time_basis.timestamp())),
-            }
-            
-            format_param = request.GET.get("format", "").lower()
-            cmd_param = request.GET.get("cmd", "").lower()
-            
-            use_format = 'standard'
-            use_cmd = 'GetTime'
-            
-            if format_param in time_formats:
-                use_format = format_param
-            
-            if cmd_param in ['gettime', 'settime']:
-                use_cmd = cmd_param.capitalize()
-            
-            time_str = time_formats[use_format]
-            
-            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+            # Do not return <Time>: many ZKTeco models apply it and shift the clock
+            # (e.g. treat server local time as UTC + device TZ = +3h). Attendance push
+            # is unaffected; only device-side HTTP time sync is disabled from our side.
+            response_xml = """<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
-                            <Cmd>{use_cmd}</Cmd>
+                            <Cmd>GetTime</Cmd>
                             <Status>OK</Status>
-                            <Time>{time_str}</Time>
                         </Response>"""
-            
-            response = HttpResponse(response_xml, content_type="application/xml", status=200)
-            
-            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response['Pragma'] = 'no-cache'
-            response['Expires'] = '0'
-            response['Content-Length'] = str(len(response_xml))
-            
+            response = HttpResponse(
+                response_xml, content_type="application/xml", status=200
+            )
+            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
+            response["Content-Length"] = str(len(response_xml))
             return response
         else:
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>

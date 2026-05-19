@@ -1,8 +1,9 @@
 """
 Service layer for fingerprint device integration with ZKteco devices
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Tuple
+from django.db.models import Max
 from django.utils import timezone
 from django.utils.timezone import make_aware, make_naive
 from django.conf import settings
@@ -142,6 +143,26 @@ class ZKtecoDeviceService:
             "Check device admin software can connect to verify IP/port",
         ]
         return suggestions
+
+    def _normalize_device_timestamp(self, device_timestamp: datetime) -> datetime:
+        """Convert device naive local time to UTC-aware datetime for storage/comparison."""
+        if timezone.is_naive(device_timestamp):
+            from .utils import get_device_timezone
+            import pytz
+            device_tz = get_device_timezone()
+            device_timestamp = device_tz.localize(device_timestamp)
+            device_timestamp = device_timestamp.astimezone(pytz.UTC)
+        return device_timestamp
+
+    def _get_student_last_synced_timestamps(self) -> Dict[int, datetime]:
+        """Latest synced attendance timestamp per student for this device."""
+        return {
+            row['student']: row['last_ts']
+            for row in Attendance.objects.filter(device=self.device)
+            .values('student')
+            .annotate(last_ts=Max('timestamp'))
+            if row['last_ts'] is not None
+        }
     
     def sync_attendance(self) -> Dict:
         """Sync attendance records from device"""
@@ -153,6 +174,8 @@ class ZKtecoDeviceService:
             
             # Get attendance records from device
             attendances = self.connection.get_attendance()
+            student_last_synced = self._get_student_last_synced_timestamps()
+            sync_overlap = timedelta(minutes=2)
             
             synced_records = []
             skipped_records = []
@@ -187,87 +210,89 @@ class ZKtecoDeviceService:
                     # Determine attendance type based on punch state
                     # Punch state: 0=Check-in, 1=Check-out (may vary by device)
                     attendance_type = 'CHECK_IN' if att.punch == 0 else 'CHECK_OUT'
-                    
-                    # Handle timezone: Device sends naive datetime in device's local time
-                    # The device stores time in its local timezone (not UTC)
-                    device_timestamp = att.timestamp
-                    if timezone.is_naive(device_timestamp):
-                        # Device timestamp is naive (no timezone info)
-                        # IMPORTANT: The device stores time in its LOCAL timezone
-                        # We need to localize it to the device's timezone, then convert to UTC for storage
-                        from .utils import get_device_timezone
-                        import pytz
-                        device_tz = get_device_timezone()  # Get timezone from Django settings
-                        # Localize the naive timestamp to device's timezone
-                        device_timestamp = device_tz.localize(device_timestamp)
-                        # Convert to UTC for database storage (Django stores datetimes in UTC)
-                        device_timestamp = device_timestamp.astimezone(pytz.UTC)
-                        # Django can work with pytz timezone-aware datetimes directly
-                    
-                    # Check if record already exists (within 1 minute tolerance)
-                    from datetime import timedelta
-                    time_tolerance = timedelta(minutes=1)
-                    
-                    existing = Attendance.objects.filter(
-                        student=student,
-                        timestamp__gte=device_timestamp - time_tolerance,
-                        timestamp__lte=device_timestamp + time_tolerance
-                    ).first()
-                    
-                    if not existing:
-                        attendance = Attendance.create_attendance(
-                            student=student,
-                            attendance_type=attendance_type,
-                            timestamp=device_timestamp,
-                            device=self.device
-                        )
-                        
-                        # Send WhatsApp notification to parents
-                        notification_result = None
-                        try:
-                            from .notifications import WhatsAppNotificationService
-                            whatsapp_service = WhatsAppNotificationService()
-                            notification_result = whatsapp_service.send_attendance_notification(attendance)
-                            
-                            # Log notification results for debugging
-                            if notification_result.get('success'):
-                                print(f"✓ WhatsApp notification sent for {student.full_name}: {notification_result.get('sent', 0)} sent, {notification_result.get('failed', 0)} failed")
-                            else:
-                                print(f"✗ WhatsApp notification failed for {student.full_name}: {notification_result.get('errors', ['Unknown error'])}")
-                        except Exception as e:
-                            # Don't fail the sync if notification fails
-                            import traceback
-                            print(f"✗ Error sending WhatsApp notification for {student.full_name}: {str(e)}")
-                            print(f"  Traceback: {traceback.format_exc()}")
-                            notification_result = {'success': False, 'error': str(e)}
-                        
-                        # Send SMS notification to parents
-                        sms_notification_result = None
-                        try:
-                            from .notifications import SMSNotificationService
-                            sms_service = SMSNotificationService()
-                            sms_notification_result = sms_service.send_attendance_notification(attendance)
-                            
-                            # Log SMS notification results for debugging
-                            if sms_notification_result.get('success'):
-                                print(f"✓ SMS notification sent for {student.full_name}: {sms_notification_result.get('sent', 0)} sent, {sms_notification_result.get('failed', 0)} failed")
-                            else:
-                                print(f"✗ SMS notification failed for {student.full_name}: {sms_notification_result.get('errors', ['Unknown error'])}")
-                        except Exception as e:
-                            # Don't fail the sync if SMS notification fails
-                            import traceback
-                            print(f"✗ Error sending SMS notification for {student.full_name}: {str(e)}")
-                            print(f"  Traceback: {traceback.format_exc()}")
-                            sms_notification_result = {'success': False, 'error': str(e)}
-                        
-                        synced_records.append({
-                            'id': attendance.id,
+                    device_timestamp = self._normalize_device_timestamp(att.timestamp)
+
+                    # Skip records already synced for this student on this device
+                    last_synced = student_last_synced.get(student.id)
+                    if last_synced and device_timestamp <= last_synced - sync_overlap:
+                        skipped_records.append({
                             'student': student.full_name,
                             'student_id': student.student_id,
-                            'timestamp': attendance.timestamp.isoformat(),
+                            'timestamp': device_timestamp.isoformat(),
                             'type': attendance_type,
-                            'notification': notification_result
+                            'reason': 'Already synced',
                         })
+                        continue
+                    
+                    # Check if record already exists (within 1 minute tolerance)
+                    time_tolerance = timedelta(minutes=1)
+                    existing = Attendance.objects.filter(
+                        student=student,
+                        attendance_type=attendance_type,
+                        timestamp__gte=device_timestamp - time_tolerance,
+                        timestamp__lte=device_timestamp + time_tolerance,
+                    ).exists()
+                    
+                    if existing:
+                        skipped_records.append({
+                            'student': student.full_name,
+                            'student_id': student.student_id,
+                            'timestamp': device_timestamp.isoformat(),
+                            'type': attendance_type,
+                            'reason': 'Already synced',
+                        })
+                        continue
+
+                    attendance = Attendance.create_attendance(
+                        student=student,
+                        attendance_type=attendance_type,
+                        timestamp=device_timestamp,
+                        device=self.device
+                    )
+                    previous_last = student_last_synced.get(student.id)
+                    if not previous_last or device_timestamp > previous_last:
+                        student_last_synced[student.id] = device_timestamp
+
+                    # Send WhatsApp notification to parents
+                    notification_result = None
+                    try:
+                        from .notifications import WhatsAppNotificationService
+                        whatsapp_service = WhatsAppNotificationService()
+                        notification_result = whatsapp_service.send_attendance_notification(attendance)
+
+                        if notification_result.get('success'):
+                            print(f"✓ WhatsApp notification sent for {student.full_name}: {notification_result.get('sent', 0)} sent, {notification_result.get('failed', 0)} failed")
+                        else:
+                            print(f"✗ WhatsApp notification failed for {student.full_name}: {notification_result.get('errors', ['Unknown error'])}")
+                    except Exception as e:
+                        import traceback
+                        print(f"✗ Error sending WhatsApp notification for {student.full_name}: {str(e)}")
+                        print(f"  Traceback: {traceback.format_exc()}")
+                        notification_result = {'success': False, 'error': str(e)}
+
+                    # Send SMS notification to parents
+                    try:
+                        from .notifications import SMSNotificationService
+                        sms_service = SMSNotificationService()
+                        sms_notification_result = sms_service.send_attendance_notification(attendance)
+
+                        if sms_notification_result.get('success'):
+                            print(f"✓ SMS notification sent for {student.full_name}: {sms_notification_result.get('sent', 0)} sent, {sms_notification_result.get('failed', 0)} failed")
+                        else:
+                            print(f"✗ SMS notification failed for {student.full_name}: {sms_notification_result.get('errors', ['Unknown error'])}")
+                    except Exception as e:
+                        import traceback
+                        print(f"✗ Error sending SMS notification for {student.full_name}: {str(e)}")
+                        print(f"  Traceback: {traceback.format_exc()}")
+
+                    synced_records.append({
+                        'id': attendance.id,
+                        'student': student.full_name,
+                        'student_id': student.student_id,
+                        'timestamp': attendance.timestamp.isoformat(),
+                        'type': attendance_type,
+                        'notification': notification_result
+                    })
                 except Student.DoesNotExist:
                     # Student not found - log for review
                     skipped_records.append({
