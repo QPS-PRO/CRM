@@ -226,6 +226,15 @@ class AttendanceSettings(models.Model):
     sync_frequency_hours = models.IntegerField(default=0, help_text="Hours component of sync frequency")
     sync_frequency_minutes = models.IntegerField(default=0, help_text="Minutes component of sync frequency")
     sync_frequency_seconds = models.IntegerField(default=30, help_text="Seconds component of sync frequency")
+    adms_ahead_serial_numbers = models.TextField(
+        blank=True,
+        default="",
+        help_text="Internal storage: one device serial number (SN) per line. Managed via admin device picker.",
+    )
+    adms_ahead_offset_hours = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Hours to subtract from ADMS punch times for devices listed above (e.g. 5 if clock is 5h ahead).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -244,10 +253,28 @@ class AttendanceSettings(models.Model):
             raise ValidationError("Lateness start time must be after attendance end time")
         if self.lateness_start_time >= self.lateness_end_time:
             raise ValidationError("Lateness start time must be before end time")
+        if self.adms_ahead_offset_hours > 12:
+            raise ValidationError("ADMS ahead offset cannot exceed 12 hours")
 
     def get_sync_frequency_seconds(self):
         """Get total sync frequency in seconds"""
         return (self.sync_frequency_hours * 3600) + (self.sync_frequency_minutes * 60) + self.sync_frequency_seconds
+
+    def get_adms_ahead_serial_number_set(self):
+        """Serial numbers (SN) of devices whose ADMS punch times need normalization."""
+        if not self.adms_ahead_serial_numbers:
+            return set()
+        return {
+            sn.strip()
+            for sn in self.adms_ahead_serial_numbers.replace(",", "\n").splitlines()
+            if sn.strip()
+        }
+
+    def should_normalize_adms_timestamp(self, serial_number):
+        """True if this device SN is configured as ahead-of-actual-time."""
+        if not serial_number:
+            return False
+        return serial_number.strip() in self.get_adms_ahead_serial_number_set()
 
     @classmethod
     def get_settings(cls):

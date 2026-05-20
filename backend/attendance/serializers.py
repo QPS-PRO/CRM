@@ -168,9 +168,10 @@ class AttendanceSettingsSerializer(serializers.ModelSerializer):
             'lateness_start_time', 'lateness_end_time',
             'sms_template', 'sync_frequency_hours', 'sync_frequency_minutes',
             'sync_frequency_seconds', 'sync_frequency_total_seconds',
+            'adms_ahead_serial_numbers', 'adms_ahead_offset_hours',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'adms_ahead_serial_numbers']
     
     def get_sync_frequency_total_seconds(self, obj):
         """Get total sync frequency in seconds"""

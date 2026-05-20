@@ -27,7 +27,7 @@ from .serializers import (
     SMSLogSerializer,
     AttendanceSettingsSerializer,
 )
-from .utils import get_device_timezone, correct_ahead_device_clock_timestamp
+from .utils import get_device_timezone, normalize_adms_timestamp_for_device
 from .services import ZKtecoDeviceService
 from .notifications import SMSNotificationService
 
@@ -1163,8 +1163,9 @@ def iclock_cdata(request):
                                 )
 
                     if not timestamp_parse_failed and timezone.is_naive(timestamp):
-                        # Fix fast device clock (+4..+5h); no-op if already matches local time
-                        timestamp = correct_ahead_device_clock_timestamp(timestamp)
+                        timestamp = normalize_adms_timestamp_for_device(
+                            timestamp, serial_number
+                        )
 
                     if timezone.is_naive(timestamp):
                         timestamp = timezone.make_aware(timestamp, pytz.UTC)
