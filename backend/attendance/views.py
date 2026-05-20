@@ -10,10 +10,13 @@ from django.db import models
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, JsonResponse
 
+import logging
 import pytz
 import traceback
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 from core.models import Student, Branch
 from .models import FingerprintDevice, Attendance, SMSLog, AttendanceSettings
@@ -920,7 +923,7 @@ def iclock_cdata(request):
 
     This endpoint handles:
     - GET /iclock/cdata: Device handshake/initialization (GetOptions)
-    - GET /iclock/getrequest: Acknowledgment only — no <Time> is sent (prevents clock changes)
+    - GET /iclock/getrequest: Plain "OK" only (ADMS: no commands / no clock sync)
     - POST: Attendance data push from device
 
     Expected URL format: /iclock/cdata?SN=<serial_number>&table=<table_name>&OpStamp=<timestamp>
@@ -941,24 +944,23 @@ def iclock_cdata(request):
 
     if request.method == "GET":
         request_path = request.path
-        
-        if 'getrequest' in request_path.lower():
-            # Do not return <Time>: many ZKTeco models apply it and shift the clock
-            # (e.g. treat server local time as UTC + device TZ = +3h). Attendance push
-            # is unaffected; only device-side HTTP time sync is disabled from our side.
-            response_xml = """<?xml version="1.0" encoding="UTF-8"?>
-                        <Response>
-                            <Cmd>GetTime</Cmd>
-                            <Status>OK</Status>
-                        </Response>"""
-            response = HttpResponse(
-                response_xml, content_type="application/xml", status=200
+        request_uri = request.META.get("REQUEST_URI", request_path)
+        is_getrequest = (
+            "getrequest" in request_path.lower()
+            or "getrequest" in request_uri.lower()
+        )
+
+        if is_getrequest:
+            # ADMS spec: respond with plain OK when there are no queued commands.
+            # Do NOT return XML GetTime/SetTime or <Time> — many firmware builds still
+            # adjust the device clock (often treating server time as UTC + device TZ).
+            logger.info(
+                "iclock getrequest (no time sync): SN=%s path=%s uri=%s",
+                serial_number,
+                request_path,
+                request_uri,
             )
-            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response["Pragma"] = "no-cache"
-            response["Expires"] = "0"
-            response["Content-Length"] = str(len(response_xml))
-            return response
+            return HttpResponse("OK", content_type="text/plain", status=200)
         else:
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
