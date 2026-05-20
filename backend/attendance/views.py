@@ -27,7 +27,7 @@ from .serializers import (
     SMSLogSerializer,
     AttendanceSettingsSerializer,
 )
-from .utils import get_device_timezone
+from .utils import get_device_timezone, correct_ahead_device_clock_timestamp
 from .services import ZKtecoDeviceService
 from .notifications import SMSNotificationService
 
@@ -923,7 +923,7 @@ def iclock_cdata(request):
 
     This endpoint handles:
     - GET /iclock/cdata: Device handshake/initialization (GetOptions)
-    - GET /iclock/getrequest: Plain "OK" only (ADMS: no commands / no clock sync)
+    - GET /iclock/getrequest: Time sync response (GetTime XML with server local time)
     - POST: Attendance data push from device
 
     Expected URL format: /iclock/cdata?SN=<serial_number>&table=<table_name>&OpStamp=<timestamp>
@@ -951,16 +951,46 @@ def iclock_cdata(request):
         )
 
         if is_getrequest:
-            # ADMS spec: respond with plain OK when there are no queued commands.
-            # Do NOT return XML GetTime/SetTime or <Time> — many firmware builds still
-            # adjust the device clock (often treating server time as UTC + device TZ).
-            logger.info(
-                "iclock getrequest (no time sync): SN=%s path=%s uri=%s",
-                serial_number,
-                request_path,
-                request_uri,
+            device_tz = get_device_timezone()
+            server_now = timezone.now()
+            server_local_time = server_now.astimezone(device_tz)
+
+            time_formats = {
+                "standard": server_local_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "iso": server_local_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "compact": server_local_time.strftime("%Y%m%d%H%M%S"),
+                "unix": str(int(server_local_time.timestamp())),
+            }
+
+            format_param = request.GET.get("format", "").lower()
+            cmd_param = request.GET.get("cmd", "").lower()
+
+            use_format = "standard"
+            use_cmd = "GetTime"
+
+            if format_param in time_formats:
+                use_format = format_param
+
+            if cmd_param in ["gettime", "settime"]:
+                use_cmd = cmd_param.capitalize()
+
+            time_str = time_formats[use_format]
+
+            response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+                        <Response>
+                            <Cmd>{use_cmd}</Cmd>
+                            <Status>OK</Status>
+                            <Time>{time_str}</Time>
+                        </Response>"""
+
+            response = HttpResponse(
+                response_xml, content_type="application/xml", status=200
             )
-            return HttpResponse("OK", content_type="text/plain", status=200)
+            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
+            response["Content-Length"] = str(len(response_xml))
+            return response
         else:
             response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
@@ -1110,6 +1140,7 @@ def iclock_cdata(request):
                         errors.append(f"Student not found for user_id: {user_id}")
                         continue
 
+                    timestamp_parse_failed = False
                     try:
                         timestamp = datetime.strptime(
                             timestamp_str, "%Y-%m-%d %H:%M:%S"
@@ -1126,10 +1157,15 @@ def iclock_cdata(request):
                                 )
                             except ValueError:
                                 timestamp = timezone.now()
+                                timestamp_parse_failed = True
                                 errors.append(
                                     f"Could not parse timestamp: {timestamp_str}, using current time"
                                 )
-                    
+
+                    if not timestamp_parse_failed and timezone.is_naive(timestamp):
+                        # Fix fast device clock (+4..+5h); no-op if already matches local time
+                        timestamp = correct_ahead_device_clock_timestamp(timestamp)
+
                     if timezone.is_naive(timestamp):
                         timestamp = timezone.make_aware(timestamp, pytz.UTC)
                     else:
